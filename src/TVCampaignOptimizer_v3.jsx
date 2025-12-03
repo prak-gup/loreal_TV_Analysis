@@ -576,10 +576,9 @@ export default function TVCampaignOptimizer() {
       channel.changePercent?.toFixed(1),
       (() => {
         const raw = channel.incrementalImpactShare || 0;
-        if (Math.abs(raw) < 0.1) return '0.0';
-        if (raw > 30) return '30.0';
-        if (raw < -30) return '-30.0';
-        return raw.toFixed(1);
+        if (raw > 30) return '30.00';
+        if (raw < -30) return '-30.00';
+        return raw.toFixed(2);
       })()
     ]);
 
@@ -753,17 +752,15 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', color: (() => {
                     const raw = channel.incrementalImpactShare || 0;
-                    if (Math.abs(raw) < 0.1) return COLORS.muted;
                     if (raw > 0) return COLORS.success;
                     if (raw < 0) return COLORS.danger;
                     return COLORS.muted;
                   })(), fontWeight: 700 }}>
                     {(() => {
                       const raw = channel.incrementalImpactShare || 0;
-                      if (Math.abs(raw) < 0.1) return '0.0%';
                       if (raw > 30) return '>30%';
                       if (raw < -30) return '<-30%';
-                      return `${raw > 0 ? '+' : ''}${raw.toFixed(1)}%`;
+                      return `${raw > 0 ? '+' : ''}${raw.toFixed(2)}%`;
                     })()}
                   </td>
                 </tr>
