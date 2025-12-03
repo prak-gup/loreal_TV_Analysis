@@ -383,9 +383,12 @@ export default function TVCampaignOptimizer() {
       finalChannels.forEach(channel => {
         channel.newCostShare = (channel.newCost / totalCost) * 100;
         channel.change = channel.newCost - (channel.originalCost || 0);
-        channel.changePercent = channel.originalCost > 0
-          ? ((channel.newCost - channel.originalCost) / channel.originalCost) * 100
-          : (channel.newCost > 0 ? 100 : 0);
+        // % Cost Change based on cost share: (new% - old%) / old%
+        const baseShare = channel.originalCostShare || 0;
+        const newShare = channel.newCostShare || 0;
+        channel.changePercent = baseShare > 0
+          ? ((newShare - baseShare) / baseShare) * 100
+          : (newShare > 0 ? 100 : 0);
 
         const impact = channel.Impact || 0;
         if (impact > 0 && channel.originalCost > 0) {
@@ -748,6 +751,29 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
                     {channel.newCostShare?.toFixed(1)}%
+                  </td>
+                  <td
+                    style={{
+                      padding: '12px 10px',
+                      textAlign: 'right',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      color: (() => {
+                        if (channel.tag === 'UNCHANGED') return COLORS.muted;
+                        const raw = channel.changePercent || 0;
+                        if (raw > 0) return COLORS.success;
+                        if (raw < 0) return COLORS.danger;
+                        return COLORS.muted;
+                      })()
+                    }}
+                  >
+                    {(() => {
+                      if (channel.tag === 'UNCHANGED') return '—';
+                      const raw = channel.changePercent || 0;
+                      if (raw > 30) return '>30%';
+                      if (raw < -30) return '<-30%';
+                      return `${raw > 0 ? '+' : ''}${raw.toFixed(1)}%`;
+                    })()}
                   </td>
                 </tr>
               );
