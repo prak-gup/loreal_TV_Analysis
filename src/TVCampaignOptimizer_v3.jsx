@@ -1090,7 +1090,7 @@ export default function TVCampaignOptimizer() {
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
             <div style={{ background: '#f8fafc', padding: 20, borderRadius: 10, textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.primary }}>{analyzeChannels.channels.length}</div>
               <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4, fontWeight: 600, textTransform: 'uppercase' }}>Total Channels</div>
@@ -1106,10 +1106,6 @@ export default function TVCampaignOptimizer() {
             <div style={{ background: '#f8fafc', padding: 20, borderRadius: 10, textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.primary }}>{formatCurrency(analyzeChannels.totalCost)}</div>
               <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4, fontWeight: 600, textTransform: 'uppercase' }}>Total Budget</div>
-            </div>
-            <div style={{ background: '#f8fafc', padding: 20, borderRadius: 10, textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.primary }}>{analyzeChannels.totalReach.toFixed(1)}%</div>
-              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4, fontWeight: 600, textTransform: 'uppercase' }}>Total Reach</div>
             </div>
           </div>
         </div>
@@ -1128,9 +1124,10 @@ export default function TVCampaignOptimizer() {
           {/* Improvement Cards */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: '1fr',
             gap: 24,
-            marginBottom: 24
+            marginBottom: 24,
+            maxWidth: 400
           }}>
             <div style={{
               background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
@@ -1147,42 +1144,6 @@ export default function TVCampaignOptimizer() {
               </div>
               <div style={{ fontSize: 13, opacity: 0.85 }}>
                 From {optimizedPlan.original.totalImpact.toFixed(0)} → {optimizedPlan.optimized.totalImpact.toFixed(0)}
-              </div>
-            </div>
-
-            <div style={{
-              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-              borderRadius: 12,
-              padding: 28,
-              color: 'white',
-              boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)'
-            }}>
-              <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
-                Reach Improvement
-              </div>
-              <div style={{ fontSize: 42, fontWeight: 800, marginBottom: 4 }}>
-                {optimizedPlan.improvement.reach > 0 ? '+' : ''}{optimizedPlan.improvement.reach.toFixed(1)}%
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.85 }}>
-                From {optimizedPlan.original.totalReach.toFixed(1)}% → {optimizedPlan.optimized.totalReach.toFixed(1)}%
-              </div>
-            </div>
-
-            <div style={{
-              background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-              borderRadius: 12,
-              padding: 28,
-              color: 'white',
-              boxShadow: '0 4px 14px rgba(249, 115, 22, 0.4)'
-            }}>
-              <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
-                GRP Improvement
-              </div>
-              <div style={{ fontSize: 42, fontWeight: 800, marginBottom: 4 }}>
-                {optimizedPlan.improvement.grp > 0 ? '+' : ''}{optimizedPlan.improvement.grp.toFixed(1)}%
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.85 }}>
-                From {optimizedPlan.original.totalGRP.toFixed(0)} → {optimizedPlan.optimized.totalGRP.toFixed(0)}
               </div>
             </div>
           </div>
