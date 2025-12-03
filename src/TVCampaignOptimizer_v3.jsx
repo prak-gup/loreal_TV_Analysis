@@ -553,8 +553,7 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Genre</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Reach %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>
-                {optimizationMetric === 'reach' ? 'Reach Score' :
-                 optimizationMetric === 'impact_reach' ? 'Impact/Reach' : 'Impact/Cost'}
+                {optimizationMetric === 'reach' ? 'Reach Score' : 'Impact/Reach'}
               </th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
@@ -690,8 +689,7 @@ export default function TVCampaignOptimizer() {
   const renderScoreChart = () => {
     if (!analyzeChannels) return null;
 
-    const metricLabel = optimizationMetric === 'reach' ? 'Reach Score' :
-                       optimizationMetric === 'impact_reach' ? 'Impact/Reach' : 'Impact/Cost';
+    const metricLabel = optimizationMetric === 'reach' ? 'Reach Score' : 'Impact/Reach';
 
     const data = analyzeChannels.channels.map(c => ({
       name: c.Channel,
@@ -896,7 +894,6 @@ export default function TVCampaignOptimizer() {
             >
               <option value="reach">Reach (Maximize Coverage)</option>
               <option value="impact_reach">Impact / Reach (Impact Density)</option>
-              <option value="impact_cost">Impact / Cost (Efficiency)</option>
             </select>
           </div>
 
