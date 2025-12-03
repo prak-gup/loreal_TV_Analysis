@@ -703,7 +703,7 @@ export default function TVCampaignOptimizer() {
       // Scale % of Incremental Impact to match the order of magnitude of Impact Improvement
       const absExpectedImprovement = Math.abs(expectedImprovementPercent);
       
-      if (absExpectedImprovement > 0) {
+      if (absExpectedImprovement > 0 && channelsWithImpact.length > 0) {
         // Special case: If Impact Improvement < 1%, cap individual channels at 5% + randomness
         if (absExpectedImprovement < 1.0) {
           channelsWithImpact.forEach(channel => {
@@ -725,29 +725,60 @@ export default function TVCampaignOptimizer() {
             }
           });
         } else {
-          // For Impact Improvement >= 1%, scale values to match order of magnitude
-          // Find the maximum absolute value among channels with impact
-          const maxAbsValue = Math.max(...channelsWithImpact.map(c => Math.abs(c.incrementalImpactPercent || 0)), 0);
+          // For Impact Improvement >= 1%, always scale values to match order of magnitude
+          // Calculate sum of absolute values to determine if scaling is needed
+          const sumOfAbsValues = channelsWithImpact.reduce((sum, c) => 
+            sum + Math.abs(c.incrementalImpactPercent || 0), 0);
           
-          if (maxAbsValue > 0 && maxAbsValue > absExpectedImprovement * 2) {
-            // Values are too large relative to Impact Improvement (more than 2x)
-            // Scale them down proportionally
-            // Target: largest channel should be at most 1.5x Impact Improvement
-            const targetMaxValue = absExpectedImprovement * 1.5;
-            const scalingFactor = targetMaxValue / maxAbsValue;
+          if (sumOfAbsValues > 0) {
+            // Determine order of magnitude of Impact Improvement
+            // If Impact Improvement is in 10s (e.g., 10%), values should be in 10s too (like 5%, 8%, 12%)
+            // If Impact Improvement is in 100s (e.g., 150%), values can be in 100s
             
-            channelsWithImpact.forEach(channel => {
-              const currentValue = channel.incrementalImpactPercent || 0;
-              const absValue = Math.abs(currentValue);
-              const scaledAbsValue = absValue * scalingFactor;
+            // If sum of absolute values is much larger than Impact Improvement (different order of magnitude),
+            // scale everything down proportionally
+            // Threshold: if sum is more than 5x Impact Improvement, scale down
+            if (sumOfAbsValues > absExpectedImprovement * 5) {
+              // Scale down proportionally to bring values into same order of magnitude
+              // Target: sum should be roughly 2-3x Impact Improvement (allowing for positive/negative mix)
+              const targetSum = absExpectedImprovement * 2.5;
+              const scalingFactor = targetSum / sumOfAbsValues;
               
-              // Enforce sign
-              if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
-                channel.incrementalImpactPercent = scaledAbsValue;
-              } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
-                channel.incrementalImpactPercent = -scaledAbsValue;
+              channelsWithImpact.forEach(channel => {
+                const currentValue = channel.incrementalImpactPercent || 0;
+                const absValue = Math.abs(currentValue);
+                const scaledAbsValue = absValue * scalingFactor;
+                
+                // Enforce sign
+                if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+                  channel.incrementalImpactPercent = scaledAbsValue;
+                } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+                  channel.incrementalImpactPercent = -scaledAbsValue;
+                }
+              });
+            } else {
+              // Even if sum is reasonable, check individual max values
+              // Cap individual channels at 1.8x Impact Improvement
+              const maxAbsValue = Math.max(...channelsWithImpact.map(c => Math.abs(c.incrementalImpactPercent || 0)), 0);
+              const targetMaxValue = absExpectedImprovement * 1.8;
+              
+              if (maxAbsValue > targetMaxValue) {
+                const scalingFactor = targetMaxValue / maxAbsValue;
+                
+                channelsWithImpact.forEach(channel => {
+                  const currentValue = channel.incrementalImpactPercent || 0;
+                  const absValue = Math.abs(currentValue);
+                  const scaledAbsValue = absValue * scalingFactor;
+                  
+                  // Enforce sign
+                  if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+                    channel.incrementalImpactPercent = scaledAbsValue;
+                  } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+                    channel.incrementalImpactPercent = -scaledAbsValue;
+                  }
+                });
               }
-            });
+            }
           }
         }
       }
