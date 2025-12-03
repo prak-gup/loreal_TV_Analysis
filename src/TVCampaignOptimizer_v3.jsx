@@ -142,7 +142,8 @@ export default function TVCampaignOptimizer() {
         impactCostScore: d.Cost > 0 ? (d.Impact / d.Cost) * 1000000 : 0,
         costShare: 0,
         isHighThreshold: false,
-        isFTA: (d.Genre || '').toLowerCase().includes('fta')
+        // FTA protection is disabled for UP so optimization behaves like previous version
+        isFTA: selectedRegion !== 'UP' && (d.Genre || '').toLowerCase().includes('fta')
       }));
 
     if (channelsWithScores.length === 0) return null;
@@ -184,7 +185,7 @@ export default function TVCampaignOptimizer() {
       reachScore: d.SyncReach,
       impactReachScore: d.SyncReach > 0 ? d.Impact / d.SyncReach : 0,
       impactCostScore: d.Cost > 0 ? (d.Impact / d.Cost) * 1000000 : 0,
-      isFTA: (d.Genre || '').toLowerCase().includes('fta')
+      isFTA: selectedRegion !== 'UP' && (d.Genre || '').toLowerCase().includes('fta')
     }));
 
     return {
@@ -293,7 +294,7 @@ export default function TVCampaignOptimizer() {
           change: 0,
           changePercent: 0,
           isHighThreshold: d.SyncReach > 5,
-          isFTA: (d.Genre || '').toLowerCase().includes('fta'),
+          isFTA: selectedRegion !== 'UP' && (d.Genre || '').toLowerCase().includes('fta'),
           isNewFromLearning: true,
           tag: 'NEW'
         }))
