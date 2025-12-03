@@ -380,6 +380,9 @@ export default function TVCampaignOptimizer() {
         }
       });
 
+      // Debug: Log a sample channel
+      console.log('Sample channel with incremental impact:', finalChannels[0]);
+
       // Filter out channels with negligible spend
       const activeChannels = finalChannels.filter(c => c.newCost > 1000 || c.originalCost > 0);
 
@@ -449,7 +452,7 @@ export default function TVCampaignOptimizer() {
       channel.newCost?.toFixed(0),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
-      (channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW') && Math.abs(channel.incrementalImpactPercent) >= 0.01
+      (channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW')
         ? channel.incrementalImpactPercent?.toFixed(2)
         : ''
     ]);
@@ -575,7 +578,7 @@ export default function TVCampaignOptimizer() {
                     color: channel.incrementalImpact > 0 ? COLORS.success :
                            channel.incrementalImpact < 0 ? COLORS.danger : COLORS.muted
                   }}>
-                    {(channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW') && Math.abs(channel.incrementalImpactPercent) >= 0.01
+                    {(channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW')
                       ? `${channel.incrementalImpactPercent > 0 ? '+' : ''}${channel.incrementalImpactPercent.toFixed(2)}%`
                       : '—'}
                   </td>
