@@ -699,6 +699,74 @@ export default function TVCampaignOptimizer() {
         }
       });
 
+      // Apply dampening factor based on Impact Improvement magnitude
+      // Scale % of Incremental Impact to match the order of magnitude of Impact Improvement
+      const absExpectedImprovement = Math.abs(expectedImprovementPercent);
+      
+      if (absExpectedImprovement > 0) {
+        // Special case: If Impact Improvement < 1%, cap individual channels at 5% + randomness
+        if (absExpectedImprovement < 1.0) {
+          channelsWithImpact.forEach(channel => {
+            const currentValue = channel.incrementalImpactPercent || 0;
+            const absValue = Math.abs(currentValue);
+            
+            if (absValue > 5.0) {
+              // Cap at 5% + random 0-2% (so max 7%)
+              const randomAddition = Math.random() * 2; // 0 to 2
+              const maxAllowed = 5.0 + randomAddition;
+              const cappedValue = Math.min(absValue, maxAllowed);
+              
+              // Enforce sign
+              if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+                channel.incrementalImpactPercent = cappedValue;
+              } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+                channel.incrementalImpactPercent = -cappedValue;
+              }
+            }
+          });
+        } else {
+          // For Impact Improvement >= 1%, scale values to match order of magnitude
+          // Find the maximum absolute value among channels with impact
+          const maxAbsValue = Math.max(...channelsWithImpact.map(c => Math.abs(c.incrementalImpactPercent || 0)), 0);
+          
+          if (maxAbsValue > 0 && maxAbsValue > absExpectedImprovement * 2) {
+            // Values are too large relative to Impact Improvement (more than 2x)
+            // Scale them down proportionally
+            // Target: largest channel should be at most 1.5x Impact Improvement
+            const targetMaxValue = absExpectedImprovement * 1.5;
+            const scalingFactor = targetMaxValue / maxAbsValue;
+            
+            channelsWithImpact.forEach(channel => {
+              const currentValue = channel.incrementalImpactPercent || 0;
+              const absValue = Math.abs(currentValue);
+              const scaledAbsValue = absValue * scalingFactor;
+              
+              // Enforce sign
+              if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+                channel.incrementalImpactPercent = scaledAbsValue;
+              } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+                channel.incrementalImpactPercent = -scaledAbsValue;
+              }
+            });
+          }
+        }
+      }
+      
+      // Redistribute after general dampening to maintain total sum
+      const sumAfterGeneralDampening = channelsWithImpact.reduce((sum, c) => 
+        sum + (c.incrementalImpactPercent || 0), 0);
+      
+      if (Math.abs(sumAfterGeneralDampening - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterGeneralDampening) > 0.01) {
+        const adjustmentFactor = expectedImprovementPercent / sumAfterGeneralDampening;
+        
+        channelsWithImpact.forEach(channel => {
+          const currentValue = channel.incrementalImpactPercent || 0;
+          const magnitude = Math.abs(currentValue);
+          const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+          channel.incrementalImpactPercent = enforcedSign * magnitude * adjustmentFactor;
+        });
+      }
+
       // Apply dampening factor for very high % of Incremental Impact values (HSM only)
       // Cap individual channel contributions to prevent unrealistic values
       if (selectedRegion === 'HSM') {
