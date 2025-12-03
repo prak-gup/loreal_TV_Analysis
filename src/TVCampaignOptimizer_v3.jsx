@@ -523,18 +523,71 @@ export default function TVCampaignOptimizer() {
       });
 
       // Calculate percentage as % of original total impact
-      // This ensures sum matches the improvement.impact percentage
+      // First, calculate for all channels
       finalChannels.forEach(channel => {
         if (totalImpact > 0) {
           // Express as % of original total impact
           channel.incrementalImpactPercent = (channel.incrementalImpact / totalImpact) * 100;
-          
-          // Cap NEW channels' % incremental impact to random value between 2-4%
-          if (channel.tag === 'NEW' && channel.incrementalImpactPercent > 0) {
-            const maxCap = Math.random() * (4 - 2) + 2; // Random between 2 and 4
-            channel.incrementalImpactPercent = Math.min(channel.incrementalImpactPercent, maxCap);
-          }
         } else {
+          channel.incrementalImpactPercent = 0;
+        }
+      });
+
+      // NEW Channels: Ranked system based on Reach %
+      // Sort NEW channels by SyncReach (descending - highest reach first)
+      const newChannels = finalChannels.filter(c => c.tag === 'NEW');
+      if (newChannels.length > 0 && totalImpact > 0) {
+        // Sort by reach descending
+        newChannels.sort((a, b) => (b.SyncReach || 0) - (a.SyncReach || 0));
+        
+        // Calculate total reach for all NEW channels
+        const totalNewChannelsReach = newChannels.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
+        
+        // Calculate total incremental impact from NEW channels (before percentage conversion)
+        const totalNewChannelsImpact = newChannels.reduce((sum, c) => sum + (c.incrementalImpact || 0), 0);
+        
+        // Calculate total NEW channels impact budget as % of original total impact
+        const totalNEWImpactBudgetPercent = totalNewChannelsImpact > 0 
+          ? (totalNewChannelsImpact / totalImpact) * 100 
+          : 0;
+        
+        // Redistribute NEW channels' % incremental impact based on their reach proportion
+        if (totalNewChannelsReach > 0 && totalNEWImpactBudgetPercent > 0) {
+          newChannels.forEach(channel => {
+            const reachShare = (channel.SyncReach || 0) / totalNewChannelsReach;
+            // Assign proportional share of total NEW impact budget based on reach
+            channel.incrementalImpactPercent = totalNEWImpactBudgetPercent * reachShare;
+          });
+        }
+      }
+
+      // Proportional Redistribution to Match Impact Improvement %
+      // Calculate expected improvement percentage
+      const expectedImprovementPercent = totalImpact > 0 
+        ? ((newImpact - totalImpact) / totalImpact) * 100 
+        : 0;
+      
+      // Sum all incremental impact percentages (only for channels with non-zero: INCREASE/DECREASE/NEW/DROPPED)
+      const channelsWithImpact = finalChannels.filter(c => 
+        (c.tag === 'INCREASE' || c.tag === 'DECREASE' || c.tag === 'NEW' || c.tag === 'DROPPED') &&
+        c.incrementalImpactPercent != null
+      );
+      
+      const currentSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
+      
+      // If there's a difference, redistribute proportionally
+      if (Math.abs(currentSum - expectedImprovementPercent) > 0.01 && currentSum !== 0) {
+        const scalingFactor = expectedImprovementPercent / currentSum;
+        
+        // Apply scaling factor to all channels with non-zero incremental impact
+        channelsWithImpact.forEach(channel => {
+          channel.incrementalImpactPercent = (channel.incrementalImpactPercent || 0) * scalingFactor;
+        });
+      }
+      
+      // Ensure UNCHANGED channels remain at 0
+      finalChannels.forEach(channel => {
+        if (channel.tag === 'UNCHANGED') {
           channel.incrementalImpactPercent = 0;
         }
       });
