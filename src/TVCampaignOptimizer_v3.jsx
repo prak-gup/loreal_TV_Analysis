@@ -689,48 +689,50 @@ export default function TVCampaignOptimizer() {
         }
       });
 
-      // Apply dampening factor for very high % of Incremental Impact values
+      // Apply dampening factor for very high % of Incremental Impact values (HSM only)
       // Cap individual channel contributions to prevent unrealistic values
-      const MAX_CHANNEL_INCREMENTAL_IMPACT = 5.0; // Cap at 5% per channel
-      const DAMPENING_THRESHOLD = 3.0; // Start dampening above 3%
-      
-      finalChannels.forEach(channel => {
-        const absValue = Math.abs(channel.incrementalImpactPercent || 0);
+      if (selectedRegion === 'HSM') {
+        const MAX_CHANNEL_INCREMENTAL_IMPACT = 5.0; // Cap at 5% per channel
+        const DAMPENING_THRESHOLD = 3.0; // Start dampening above 3%
         
-        if (absValue > DAMPENING_THRESHOLD) {
-          // Apply dampening: values above threshold are reduced
-          // Formula: dampened = threshold + (value - threshold) * dampening_factor
-          const excess = absValue - DAMPENING_THRESHOLD;
-          const dampeningFactor = Math.max(0.3, 1 - (excess / (MAX_CHANNEL_INCREMENTAL_IMPACT - DAMPENING_THRESHOLD)));
-          const dampenedValue = DAMPENING_THRESHOLD + (excess * dampeningFactor);
+        finalChannels.forEach(channel => {
+          const absValue = Math.abs(channel.incrementalImpactPercent || 0);
           
-          // Cap at maximum
-          const finalValue = Math.min(dampenedValue, MAX_CHANNEL_INCREMENTAL_IMPACT);
-          
-          // Preserve sign
-          channel.incrementalImpactPercent = channel.incrementalImpactPercent >= 0 ? finalValue : -finalValue;
-        }
-      });
-      
-      // After dampening, redistribute to maintain total sum
-      const channelsWithImpactAfterDampening = finalChannels.filter(c => 
-        (c.tag === 'INCREASE' || c.tag === 'DECREASE' || c.tag === 'NEW' || c.tag === 'DROPPED') &&
-        c.incrementalImpactPercent != null
-      );
-      
-      const sumAfterDampening = channelsWithImpactAfterDampening.reduce((sum, c) => 
-        sum + (c.incrementalImpactPercent || 0), 0);
-      
-      // Redistribute the difference proportionally
-      if (Math.abs(sumAfterDampening - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterDampening) > 0.01) {
-        const adjustmentFactor = expectedImprovementPercent / sumAfterDampening;
-        
-        channelsWithImpactAfterDampening.forEach(channel => {
-          const currentValue = channel.incrementalImpactPercent || 0;
-          const sign = currentValue >= 0 ? 1 : -1;
-          const magnitude = Math.abs(currentValue);
-          channel.incrementalImpactPercent = sign * magnitude * adjustmentFactor;
+          if (absValue > DAMPENING_THRESHOLD) {
+            // Apply dampening: values above threshold are reduced
+            // Formula: dampened = threshold + (value - threshold) * dampening_factor
+            const excess = absValue - DAMPENING_THRESHOLD;
+            const dampeningFactor = Math.max(0.3, 1 - (excess / (MAX_CHANNEL_INCREMENTAL_IMPACT - DAMPENING_THRESHOLD)));
+            const dampenedValue = DAMPENING_THRESHOLD + (excess * dampeningFactor);
+            
+            // Cap at maximum
+            const finalValue = Math.min(dampenedValue, MAX_CHANNEL_INCREMENTAL_IMPACT);
+            
+            // Preserve sign
+            channel.incrementalImpactPercent = channel.incrementalImpactPercent >= 0 ? finalValue : -finalValue;
+          }
         });
+        
+        // After dampening, redistribute to maintain total sum (HSM only)
+        const channelsWithImpactAfterDampening = finalChannels.filter(c => 
+          (c.tag === 'INCREASE' || c.tag === 'DECREASE' || c.tag === 'NEW' || c.tag === 'DROPPED') &&
+          c.incrementalImpactPercent != null
+        );
+        
+        const sumAfterDampening = channelsWithImpactAfterDampening.reduce((sum, c) => 
+          sum + (c.incrementalImpactPercent || 0), 0);
+        
+        // Redistribute the difference proportionally
+        if (Math.abs(sumAfterDampening - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterDampening) > 0.01) {
+          const adjustmentFactor = expectedImprovementPercent / sumAfterDampening;
+          
+          channelsWithImpactAfterDampening.forEach(channel => {
+            const currentValue = channel.incrementalImpactPercent || 0;
+            const sign = currentValue >= 0 ? 1 : -1;
+            const magnitude = Math.abs(currentValue);
+            channel.incrementalImpactPercent = sign * magnitude * adjustmentFactor;
+          });
+        }
       }
 
       // Filter out channels with negligible spend
@@ -1006,7 +1008,11 @@ export default function TVCampaignOptimizer() {
                     })()
                   }}>
                     {(channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW' || channel.tag === 'DROPPED')
-                      ? `${channel.incrementalImpactPercent > 0 ? '+' : ''}${channel.incrementalImpactPercent.toFixed(2)}%`
+                      ? (() => {
+                          const value = channel.incrementalImpactPercent || 0;
+                          // Positive values show +, negative values show - (no + for negative)
+                          return value > 0 ? `+${value.toFixed(2)}%` : `${value.toFixed(2)}%`;
+                        })()
                       : '—'}
                   </td>
                 </tr>
