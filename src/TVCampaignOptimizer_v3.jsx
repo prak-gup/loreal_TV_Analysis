@@ -425,22 +425,19 @@ export default function TVCampaignOptimizer() {
       }, 0);
       const newGRP = calculateNewMetric(finalChannels, 'GRP');
 
-      const totalOriginalImpact = totalImpact || 0;
+      const totalOriginalImpactForShare = finalChannels.reduce((sum, c) => {
+        const imp = c.Impact || 0;
+        return sum + (imp > 0 ? imp : 0);
+      }, 0);
       const totalNewImpact = newImpact || 0;
-      const MIN_IMPACT_SHARE = 0.5;
 
-      if (totalOriginalImpact > 0 && totalNewImpact > 0) {
+      if (totalOriginalImpactForShare > 0 && totalNewImpact > 0) {
         finalChannels.forEach(channel => {
           const impact = channel.Impact || 0;
           const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : impact;
 
-          let baseShare = impact > 0 ? (impact / totalOriginalImpact) * 100 : 0;
+          let baseShare = impact > 0 ? (impact / totalOriginalImpactForShare) * 100 : 0;
           let newShare = estNewImpact > 0 ? (estNewImpact / totalNewImpact) * 100 : 0;
-
-          if (impact <= 0 || baseShare < MIN_IMPACT_SHARE) {
-            baseShare = 0;
-            newShare = 0;
-          }
 
           channel.baseImpactShare = baseShare;
           channel.newImpactShare = newShare;
@@ -507,9 +504,7 @@ export default function TVCampaignOptimizer() {
       'Threshold Type',
       'Genre',
       'Reach %',
-      'Original Cost',
       'Original %',
-      'New Cost',
       'New %',
       'Change %',
       'Impact % Current',
@@ -522,9 +517,7 @@ export default function TVCampaignOptimizer() {
       channel.isHighThreshold ? 'High' : 'Low',
       channel.Genre,
       channel.SyncReach?.toFixed(2),
-      channel.originalCost?.toFixed(0),
       channel.originalCostShare?.toFixed(1),
-      channel.newCost?.toFixed(0),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
       channel.baseImpactShare?.toFixed(1),
@@ -666,9 +659,7 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Threshold</th>
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Genre</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Reach %</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact % (Current)</th>
@@ -700,13 +691,7 @@ export default function TVCampaignOptimizer() {
                   <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: 11, color: COLORS.muted }}>{channel.Genre}</td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{channel.SyncReach?.toFixed(2)}%</td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
-                    {formatCurrency(channel.originalCost)}
-                  </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
                     {channel.originalCostShare?.toFixed(1)}%
-                  </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
-                    {formatCurrency(channel.newCost)}
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
                     {channel.newCostShare?.toFixed(1)}%
