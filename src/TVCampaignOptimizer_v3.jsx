@@ -702,8 +702,15 @@ export default function TVCampaignOptimizer() {
       // Apply dampening factor based on Impact Improvement magnitude
       // Scale % of Incremental Impact to match the order of magnitude of Impact Improvement
       // Always cap individual channels at 30-35% max
+      // CRITICAL: Apply Reach % weighting during dampening to preserve differentiation
       const absExpectedImprovement = Math.abs(expectedImprovementPercent);
       const MAX_CHANNEL_IMPACT = 32.5; // Cap at 32.5% (middle of 30-35% range)
+      
+      // Calculate Reach % weights BEFORE dampening so we can use them during dampening
+      const totalReach = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
+      channelsWithImpact.forEach(channel => {
+        channel._normalizedReach = totalReach > 0 ? (channel.SyncReach || 0) / totalReach : 0;
+      });
       
       if (absExpectedImprovement > 0 && channelsWithImpact.length > 0) {
         // Step 1: Always cap individual channels at MAX_CHANNEL_IMPACT (30-35%)
@@ -725,6 +732,7 @@ export default function TVCampaignOptimizer() {
         
         // Step 2: Scale down if values are still in wrong order of magnitude
         // If Impact Improvement is in 10s, ensure values are also in 10s
+        // IMPORTANT: Use Reach %-weighted scaling instead of uniform scaling to preserve differences
         const maxAbsValue = Math.max(...channelsWithImpact.map(c => Math.abs(c.incrementalImpactPercent || 0)), 0);
         
         if (maxAbsValue > 0) {
@@ -745,20 +753,32 @@ export default function TVCampaignOptimizer() {
             targetMaxValue = Math.min(absExpectedImprovement * 0.3, 35.0);
           }
           
-          // If max value exceeds target, scale all values down proportionally
+          // If max value exceeds target, scale down using Reach %-weighted scaling
+          // This preserves differences: higher Reach % channels scale down less
           if (maxAbsValue > targetMaxValue) {
-            const scalingFactor = targetMaxValue / maxAbsValue;
+            // Calculate weighted target max for each channel based on Reach %
+            const REACH_DAMPENING_FACTOR = 1.5; // How much Reach % influences dampening
             
             channelsWithImpact.forEach(channel => {
               const currentValue = channel.incrementalImpactPercent || 0;
               const absValue = Math.abs(currentValue);
-              const scaledAbsValue = absValue * scalingFactor;
+              const normalizedReach = channel._normalizedReach || 0;
               
-              // Enforce sign
-              if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
-                channel.incrementalImpactPercent = scaledAbsValue;
-              } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
-                channel.incrementalImpactPercent = -scaledAbsValue;
+              // Higher Reach % channels get a higher target (less dampening)
+              // Lower Reach % channels get a lower target (more dampening)
+              const channelTargetMax = targetMaxValue * (1 + normalizedReach * REACH_DAMPENING_FACTOR);
+              
+              // Scale down proportionally to channel's target max
+              if (absValue > channelTargetMax) {
+                const scalingFactor = channelTargetMax / absValue;
+                const scaledAbsValue = absValue * scalingFactor;
+                
+                // Enforce sign
+                if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+                  channel.incrementalImpactPercent = scaledAbsValue;
+                } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+                  channel.incrementalImpactPercent = -scaledAbsValue;
+                }
               }
             });
           }
@@ -767,16 +787,9 @@ export default function TVCampaignOptimizer() {
       
       // Redistribute after general dampening to maintain total sum
       // Use Reach % as a weight factor to create meaningful differences between channels
+      // Note: Reach % weights are already calculated above during dampening
       const sumAfterGeneralDampening = channelsWithImpact.reduce((sum, c) => 
         sum + (c.incrementalImpactPercent || 0), 0);
-      
-      // Calculate Reach % weights for differentiation (calculate once, use in all redistribution steps)
-      const totalReach = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
-      
-      // Store normalized Reach % weight for each channel
-      channelsWithImpact.forEach(channel => {
-        channel._normalizedReach = totalReach > 0 ? (channel.SyncReach || 0) / totalReach : 0;
-      });
       
       if (Math.abs(sumAfterGeneralDampening - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterGeneralDampening) > 0.01) {
         // Use stronger Reach % weighting for more visible differences
