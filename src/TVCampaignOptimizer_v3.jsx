@@ -464,7 +464,6 @@ export default function TVCampaignOptimizer() {
       'Threshold Type',
       'Genre',
       'Reach %',
-      'Score',
       'Original Cost',
       'Original %',
       'New Cost',
@@ -478,7 +477,6 @@ export default function TVCampaignOptimizer() {
       channel.isHighThreshold ? 'High' : 'Low',
       channel.Genre,
       channel.SyncReach?.toFixed(2),
-      channel.currentScore?.toFixed(2),
       channel.originalCost?.toFixed(0),
       channel.originalCostShare?.toFixed(1),
       channel.newCost?.toFixed(0),
@@ -614,14 +612,11 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Threshold</th>
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Genre</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Reach %</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>
-                {optimizationMetric === 'reach' ? 'Reach Score' : 'Impact/Reach'}
-              </th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Change</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
             </tr>
           </thead>
           <tbody>
@@ -648,9 +643,6 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: 11, color: COLORS.muted }}>{channel.Genre}</td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{channel.SyncReach?.toFixed(2)}%</td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: COLORS.accent }}>
-                    {channel.currentScore?.toFixed(2)}
-                  </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
                     {formatCurrency(channel.originalCost)}
                   </td>
@@ -1149,7 +1141,7 @@ export default function TVCampaignOptimizer() {
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
             <div style={{ background: '#f8fafc', padding: 20, borderRadius: 10, textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.primary }}>{analyzeChannels.channels.length}</div>
               <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4, fontWeight: 600, textTransform: 'uppercase' }}>Total Channels</div>
@@ -1161,10 +1153,6 @@ export default function TVCampaignOptimizer() {
             <div style={{ background: '#f3e8ff', padding: 20, borderRadius: 10, textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.lowThreshold }}>{analyzeChannels.lowThresholdCount}</div>
               <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4, fontWeight: 600, textTransform: 'uppercase' }}>Low Threshold</div>
-            </div>
-            <div style={{ background: '#f8fafc', padding: 20, borderRadius: 10, textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.primary }}>{formatCurrency(analyzeChannels.totalCost)}</div>
-              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4, fontWeight: 600, textTransform: 'uppercase' }}>Total Budget</div>
             </div>
           </div>
         </div>
