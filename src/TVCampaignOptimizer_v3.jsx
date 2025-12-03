@@ -567,8 +567,7 @@ export default function TVCampaignOptimizer() {
       'Impact Score',
       'Original %',
       'New %',
-      'Change %',
-      '% of Incremental Impact'
+      'Change %'
     ];
 
     const csvRows = optimized.channels.map(channel => [
@@ -580,13 +579,7 @@ export default function TVCampaignOptimizer() {
       channel.impactScoreIndex != null ? channel.impactScoreIndex.toFixed(1) : '0.0',
       channel.originalCostShare?.toFixed(1),
       channel.newCostShare?.toFixed(1),
-      channel.changePercent?.toFixed(1),
-      (() => {
-        const raw = channel.incrementalImpactShare || 0;
-        if (raw > 30) return '30.00';
-        if (raw < -30) return '-30.00';
-        return raw.toFixed(2);
-      })()
+      channel.changePercent?.toFixed(1)
     ]);
 
     const csvContent = [
@@ -721,7 +714,6 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% of Incremental Impact</th>
             </tr>
           </thead>
           <tbody>
@@ -756,23 +748,6 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
                     {channel.newCostShare?.toFixed(1)}%
-                  </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', color: (() => {
-                    // Color driven primarily by status for easy reading
-                    if (channel.tag === 'INCREASE' || channel.tag === 'NEW') return COLORS.success;
-                    if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') return COLORS.danger;
-                    // UNCHANGED and others
-                    const raw = channel.incrementalImpactShare || 0;
-                    if (raw > 0) return COLORS.success;
-                    if (raw < 0) return COLORS.danger;
-                    return COLORS.muted;
-                  })(), fontWeight: 700 }}>
-                    {(() => {
-                      const raw = channel.incrementalImpactShare || 0;
-                      if (raw > 30) return '>30%';
-                      if (raw < -30) return '<-30%';
-                      return `${raw > 0 ? '+' : ''}${raw.toFixed(2)}%`;
-                    })()}
                   </td>
                 </tr>
               );
