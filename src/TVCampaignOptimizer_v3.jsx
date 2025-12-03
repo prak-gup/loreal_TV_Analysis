@@ -610,14 +610,62 @@ export default function TVCampaignOptimizer() {
       
       const currentSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
       
-      // If there's a difference, redistribute proportionally
-      if (Math.abs(currentSum - expectedImprovementPercent) > 0.01 && currentSum !== 0) {
-        const scalingFactor = expectedImprovementPercent / currentSum;
+      // Ensure signs match - if they don't, something is wrong with initial calculation
+      // Fix signs based on channel status before redistributing
+      channelsWithImpact.forEach(channel => {
+        const currentValue = channel.incrementalImpactPercent || 0;
+        if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+          // Should be positive
+          if (currentValue < 0) {
+            channel.incrementalImpactPercent = Math.abs(currentValue);
+          }
+        } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+          // Should be negative
+          if (currentValue > 0) {
+            channel.incrementalImpactPercent = -Math.abs(currentValue);
+          }
+        }
+      });
+      
+      // Recalculate sum after fixing signs
+      const correctedSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
+      
+      // If there's a difference, redistribute proportionally while preserving signs
+      if (Math.abs(correctedSum - expectedImprovementPercent) > 0.01 && Math.abs(correctedSum) > 0.01) {
+        // Calculate scaling factor - use absolute values to preserve signs
+        const scalingFactor = Math.abs(expectedImprovementPercent) / Math.abs(correctedSum);
         
-        // Apply scaling factor to all channels with non-zero incremental impact
+        // Preserve the sign of each channel's value and scale the magnitude
         channelsWithImpact.forEach(channel => {
-          channel.incrementalImpactPercent = (channel.incrementalImpactPercent || 0) * scalingFactor;
+          const currentValue = channel.incrementalImpactPercent || 0;
+          const sign = currentValue >= 0 ? 1 : -1;
+          const magnitude = Math.abs(currentValue);
+          channel.incrementalImpactPercent = sign * magnitude * scalingFactor;
         });
+        
+        // Adjust the sum to match exactly by distributing the remainder proportionally
+        const newSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
+        const remainder = expectedImprovementPercent - newSum;
+        
+        if (Math.abs(remainder) > 0.001) {
+          // Distribute remainder proportionally to channels with same sign as remainder
+          const channelsWithSameSign = channelsWithImpact.filter(c => {
+            const val = c.incrementalImpactPercent || 0;
+            return (remainder > 0 && val > 0) || (remainder < 0 && val < 0);
+          });
+          
+          if (channelsWithSameSign.length > 0) {
+            const totalMagnitude = channelsWithSameSign.reduce((sum, c) => 
+              sum + Math.abs(c.incrementalImpactPercent || 0), 0);
+            
+            if (totalMagnitude > 0) {
+              channelsWithSameSign.forEach(channel => {
+                const share = Math.abs(channel.incrementalImpactPercent || 0) / totalMagnitude;
+                channel.incrementalImpactPercent = (channel.incrementalImpactPercent || 0) + (remainder * share);
+              });
+            }
+          }
+        }
       }
       
       // Ensure UNCHANGED channels remain at 0
