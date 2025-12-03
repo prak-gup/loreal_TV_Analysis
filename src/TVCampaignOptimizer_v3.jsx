@@ -435,9 +435,11 @@ export default function TVCampaignOptimizer() {
         return sum + (r > 0 ? r : 0);
       }, 0);
       const totalNewImpact = newImpact || 0;
+      const totalIncrementalImpact = (newImpact - totalImpact) || 0;
 
       if (totalImpactForShare > 0 && totalReachForShare > 0 && totalNewImpact > 0) {
         let totalCombinedScore = 0;
+        let maxCombinedScore = 0;
 
         finalChannels.forEach(channel => {
           const impact = channel.Impact || 0;
@@ -450,6 +452,9 @@ export default function TVCampaignOptimizer() {
           const combinedScore = (impactPart + reachPart) / 2;
           channel._impactBaseScore = combinedScore;
           totalCombinedScore += combinedScore;
+          if (combinedScore > maxCombinedScore) {
+            maxCombinedScore = combinedScore;
+          }
         });
 
         if (totalCombinedScore > 0) {
@@ -463,6 +468,11 @@ export default function TVCampaignOptimizer() {
 
             channel.baseImpactShare = baseShare;
             channel.newImpactShare = newShare;
+
+            // Impact score indexed to 100 like Google Trends (max channel = 100)
+            channel.impactScoreIndex = maxCombinedScore > 0
+              ? (baseScore / maxCombinedScore) * 100
+              : 0;
 
             if (baseShare === 0 || channel.tag === 'UNCHANGED') {
               channel.impactShareChangePercent = 0;
@@ -482,6 +492,20 @@ export default function TVCampaignOptimizer() {
           channel.baseImpactShare = 0;
           channel.newImpactShare = 0;
           channel.impactShareChangePercent = 0;
+        });
+      }
+
+      // Per-channel share of total incremental impact
+      if (Math.abs(totalIncrementalImpact) > 1e-6) {
+        finalChannels.forEach(channel => {
+          const impact = channel.Impact || 0;
+          const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : impact;
+          const deltaImpact = estNewImpact - impact;
+          channel.incrementalImpactShare = (deltaImpact / totalIncrementalImpact) * 100;
+        });
+      } else {
+        finalChannels.forEach(channel => {
+          channel.incrementalImpactShare = 0;
         });
       }
 
@@ -533,11 +557,12 @@ export default function TVCampaignOptimizer() {
       'Threshold Type',
       'Genre',
       'Reach %',
+      'Impact Score',
       'Original %',
       'New %',
       'Change %',
       'Impact % Current',
-      'Impact % Change'
+      '% of Incremental Impact'
     ];
 
     const csvRows = optimized.channels.map(channel => [
@@ -546,14 +571,14 @@ export default function TVCampaignOptimizer() {
       channel.isHighThreshold ? 'High' : 'Low',
       channel.Genre,
       channel.SyncReach?.toFixed(2),
+      channel.impactScoreIndex != null ? channel.impactScoreIndex.toFixed(1) : '0.0',
       channel.originalCostShare?.toFixed(1),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
       channel.baseImpactShare?.toFixed(1),
       (() => {
-        const base = channel.baseImpactShare || 0;
-        const raw = channel.impactShareChangePercent || 0;
-        if (channel.tag === 'UNCHANGED' || base === 0) return '0.0';
+        const raw = channel.incrementalImpactShare || 0;
+        if (Math.abs(raw) < 0.1) return '0.0';
         if (raw > 30) return '30.0';
         if (raw < -30) return '-30.0';
         return raw.toFixed(1);
@@ -688,11 +713,12 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Threshold</th>
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Genre</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Reach %</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact Score</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact % (Current)</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Impact Change</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% of Incremental Impact</th>
             </tr>
           </thead>
           <tbody>
@@ -719,6 +745,9 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: 11, color: COLORS.muted }}>{channel.Genre}</td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{channel.SyncReach?.toFixed(2)}%</td>
+                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>
+                    {channel.impactScoreIndex != null ? channel.impactScoreIndex.toFixed(1) : '—'}
+                  </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
                     {channel.originalCostShare?.toFixed(1)}%
                   </td>
@@ -731,19 +760,17 @@ export default function TVCampaignOptimizer() {
                       : '—'}
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', color: (() => {
-                    const raw = channel.impactShareChangePercent || 0;
-                    if (channel.tag === 'UNCHANGED' || channel.baseImpactShare === 0) return COLORS.muted;
+                    const raw = channel.incrementalImpactShare || 0;
+                    if (Math.abs(raw) < 0.1) return COLORS.muted;
                     if (raw > 0) return COLORS.success;
                     if (raw < 0) return COLORS.danger;
                     return COLORS.muted;
                   })(), fontWeight: 700 }}>
                     {(() => {
-                      const base = channel.baseImpactShare || 0;
-                      const raw = channel.impactShareChangePercent || 0;
-                      if (channel.tag === 'UNCHANGED' || base === 0) return '—';
+                      const raw = channel.incrementalImpactShare || 0;
+                      if (Math.abs(raw) < 0.1) return '0.0%';
                       if (raw > 30) return '>30%';
                       if (raw < -30) return '<-30%';
-                      if (Math.abs(raw) < 0.1) return '0.0%';
                       return `${raw > 0 ? '+' : ''}${raw.toFixed(1)}%`;
                     })()}
                   </td>
