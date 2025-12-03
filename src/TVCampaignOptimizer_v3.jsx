@@ -496,12 +496,12 @@ export default function TVCampaignOptimizer() {
       }
 
       // Per-channel share of total incremental impact
-      if (Math.abs(totalIncrementalImpact) > 1e-6) {
+      if (Math.abs(totalIncrementalImpact) > 1e-6 && Math.abs(totalImpact) > 1e-6) {
         finalChannels.forEach(channel => {
           const impact = channel.Impact || 0;
           const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : impact;
           const deltaImpact = estNewImpact - impact;
-          channel.incrementalImpactShare = (deltaImpact / totalIncrementalImpact) * 100;
+          channel.incrementalImpactShare = (deltaImpact / totalImpact) * 100;
         });
       } else {
         finalChannels.forEach(channel => {
@@ -561,7 +561,6 @@ export default function TVCampaignOptimizer() {
       'Original %',
       'New %',
       'Change %',
-      'Impact % Current',
       '% of Incremental Impact'
     ];
 
@@ -575,7 +574,6 @@ export default function TVCampaignOptimizer() {
       channel.originalCostShare?.toFixed(1),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
-      channel.baseImpactShare?.toFixed(1),
       (() => {
         const raw = channel.incrementalImpactShare || 0;
         if (Math.abs(raw) < 0.1) return '0.0';
@@ -717,7 +715,6 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact % (Current)</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% of Incremental Impact</th>
             </tr>
           </thead>
@@ -753,11 +750,6 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
                     {channel.newCostShare?.toFixed(1)}%
-                  </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>
-                    {channel.baseImpactShare > 0
-                      ? `${channel.baseImpactShare.toFixed(1)}%`
-                      : '—'}
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', color: (() => {
                     const raw = channel.incrementalImpactShare || 0;
