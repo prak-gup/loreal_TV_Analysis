@@ -533,32 +533,67 @@ export default function TVCampaignOptimizer() {
         }
       });
 
-      // NEW Channels: Ranked system based on Reach %
-      // Sort NEW channels by SyncReach (descending - highest reach first)
+      // NEW Channels: Benchmark against similar existing channels
       const newChannels = finalChannels.filter(c => c.tag === 'NEW');
+      const existingChannels = finalChannels.filter(c => 
+        c.tag === 'INCREASE' || c.tag === 'DECREASE' || c.tag === 'UNCHANGED'
+      );
+      
+      // Pre-calculate fallback values (for cases where no similar channels found)
+      const totalNewChannelsReach = newChannels.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
+      const totalNewChannelsImpact = newChannels.reduce((sum, c) => sum + (c.incrementalImpact || 0), 0);
+      const totalNEWImpactBudgetPercent = totalNewChannelsImpact > 0 && totalImpact > 0
+        ? (totalNewChannelsImpact / totalImpact) * 100 
+        : 0;
+      
       if (newChannels.length > 0 && totalImpact > 0) {
-        // Sort by reach descending
-        newChannels.sort((a, b) => (b.SyncReach || 0) - (a.SyncReach || 0));
-        
-        // Calculate total reach for all NEW channels
-        const totalNewChannelsReach = newChannels.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
-        
-        // Calculate total incremental impact from NEW channels (before percentage conversion)
-        const totalNewChannelsImpact = newChannels.reduce((sum, c) => sum + (c.incrementalImpact || 0), 0);
-        
-        // Calculate total NEW channels impact budget as % of original total impact
-        const totalNEWImpactBudgetPercent = totalNewChannelsImpact > 0 
-          ? (totalNewChannelsImpact / totalImpact) * 100 
-          : 0;
-        
-        // Redistribute NEW channels' % incremental impact based on their reach proportion
-        if (totalNewChannelsReach > 0 && totalNEWImpactBudgetPercent > 0) {
-          newChannels.forEach(channel => {
-            const reachShare = (channel.SyncReach || 0) / totalNewChannelsReach;
-            // Assign proportional share of total NEW impact budget based on reach
-            channel.incrementalImpactPercent = totalNEWImpactBudgetPercent * reachShare;
+        newChannels.forEach(newChannel => {
+          const newChannelReach = newChannel.SyncReach || 0;
+          const reachTolerance = 1.0; // ±1% reach range
+          
+          // Find existing channels within ±1% reach range
+          const similarChannels = existingChannels.filter(existing => {
+            const existingReach = existing.SyncReach || 0;
+            return Math.abs(existingReach - newChannelReach) <= reachTolerance;
           });
-        }
+          
+          if (similarChannels.length > 0) {
+            // Calculate averages of similar channels' metrics
+            const avgIncrementalImpactPercent = similarChannels.reduce((sum, c) => 
+              sum + (c.incrementalImpactPercent || 0), 0) / similarChannels.length;
+            
+            const avgOldPercent = similarChannels.reduce((sum, c) => 
+              sum + (c.originalCostShare || 0), 0) / similarChannels.length;
+            
+            const avgNewPercent = similarChannels.reduce((sum, c) => 
+              sum + (c.newCostShare || 0), 0) / similarChannels.length;
+            
+            const avgReach = similarChannels.reduce((sum, c) => 
+              sum + (c.SyncReach || 0), 0) / similarChannels.length;
+            
+            // Calculate NEW channel's % of Incremental Impact using cost %-based scaling with reach adjustment
+            if (avgNewPercent > 0 && avgReach > 0) {
+              // Base calculation: scale by cost % ratio
+              const costBasedValue = (newChannel.newCostShare / avgNewPercent) * avgIncrementalImpactPercent;
+              
+              // Adjust by reach ratio
+              const reachRatio = newChannelReach / avgReach;
+              newChannel.incrementalImpactPercent = costBasedValue * reachRatio;
+            } else {
+              // Fallback: use reach-based method
+              if (totalNewChannelsReach > 0) {
+                const reachShare = newChannelReach / totalNewChannelsReach;
+                newChannel.incrementalImpactPercent = totalNEWImpactBudgetPercent * reachShare;
+              }
+            }
+          } else {
+            // No similar channels found: fallback to reach-based method
+            if (totalNewChannelsReach > 0) {
+              const reachShare = newChannelReach / totalNewChannelsReach;
+              newChannel.incrementalImpactPercent = totalNEWImpactBudgetPercent * reachShare;
+            }
+          }
+        });
       }
 
       // Proportional Redistribution to Match Impact Improvement %
