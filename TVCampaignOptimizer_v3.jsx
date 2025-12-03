@@ -352,6 +352,34 @@ export default function TVCampaignOptimizer() {
       }, 0);
       const newGRP = calculateNewMetric(finalChannels, 'GRP');
 
+      // Calculate incremental impact for each channel
+      finalChannels.forEach(channel => {
+        if (channel.originalCost > 0) {
+          // Existing channels: Calculate projected new impact using linear model
+          const impactPerCost = channel.Impact / channel.originalCost;
+          const projectedNewImpact = impactPerCost * channel.newCost;
+
+          // Calculate incremental impact (absolute change)
+          channel.incrementalImpact = projectedNewImpact - channel.Impact;
+        } else {
+          // NEW channels: Full projected impact is incremental
+          const impactPerCost = channel.Impact / channel.Cost; // Use Godrej cost as basis
+          const projectedNewImpact = impactPerCost * channel.newCost;
+          channel.incrementalImpact = projectedNewImpact; // Full impact is new
+        }
+      });
+
+      // Calculate percentage as % of original total impact
+      // This ensures sum matches the improvement.impact percentage
+      finalChannels.forEach(channel => {
+        if (totalImpact > 0) {
+          // Express as % of original total impact
+          channel.incrementalImpactPercent = (channel.incrementalImpact / totalImpact) * 100;
+        } else {
+          channel.incrementalImpactPercent = 0;
+        }
+      });
+
       // Filter out channels with negligible spend
       const activeChannels = finalChannels.filter(c => c.newCost > 1000 || c.originalCost > 0);
 
@@ -405,7 +433,8 @@ export default function TVCampaignOptimizer() {
       'Original %',
       'New Cost',
       'New %',
-      'Change %'
+      'Change %',
+      '% of Incremental Impact'
     ];
 
     const csvRows = optimized.channels.map(channel => [
@@ -419,7 +448,10 @@ export default function TVCampaignOptimizer() {
       channel.originalCostShare?.toFixed(1),
       channel.newCost?.toFixed(0),
       channel.newCostShare?.toFixed(1),
-      channel.changePercent?.toFixed(1)
+      channel.changePercent?.toFixed(1),
+      (channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW') && Math.abs(channel.incrementalImpactPercent) >= 0.01
+        ? channel.incrementalImpactPercent?.toFixed(2)
+        : ''
     ]);
 
     const csvContent = [
@@ -490,6 +522,7 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Change</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% of Incremental Impact</th>
             </tr>
           </thead>
           <tbody>
@@ -533,6 +566,18 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', color: changeColor, fontWeight: 700 }}>
                     {channel.changePercent > 0 ? '+' : ''}{channel.changePercent?.toFixed(1)}%
+                  </td>
+                  <td style={{
+                    padding: '12px 10px',
+                    textAlign: 'right',
+                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    color: channel.incrementalImpact > 0 ? COLORS.success :
+                           channel.incrementalImpact < 0 ? COLORS.danger : COLORS.muted
+                  }}>
+                    {(channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW') && Math.abs(channel.incrementalImpactPercent) >= 0.01
+                      ? `${channel.incrementalImpactPercent > 0 ? '+' : ''}${channel.incrementalImpactPercent.toFixed(2)}%`
+                      : '—'}
                   </td>
                 </tr>
               );
