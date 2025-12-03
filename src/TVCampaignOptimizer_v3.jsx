@@ -533,7 +533,7 @@ export default function TVCampaignOptimizer() {
         }
       });
 
-      // NEW Channels: Benchmark against similar existing channels
+      // NEW Channels: Benchmark using combined similarity matrix (reach × new cost %)
       const newChannels = finalChannels.filter(c => c.tag === 'NEW');
       const existingChannels = finalChannels.filter(c => 
         c.tag === 'INCREASE' || c.tag === 'DECREASE' || c.tag === 'UNCHANGED'
@@ -549,49 +549,63 @@ export default function TVCampaignOptimizer() {
       if (newChannels.length > 0 && totalImpact > 0) {
         newChannels.forEach(newChannel => {
           const newChannelReach = newChannel.SyncReach || 0;
-          const reachTolerance = 1.0; // ±1% reach range
+          const newChannelNewPercent = newChannel.newCostShare || 0;
           
-          // Find existing channels within ±1% reach range
-          const similarChannels = existingChannels.filter(existing => {
+          // Create similarity matrix: calculate combined factor for each existing channel
+          // Factor = (1 - normalized reach difference) × (1 - normalized new cost % difference)
+          const channelsWithFactors = existingChannels.map(existing => {
             const existingReach = existing.SyncReach || 0;
-            return Math.abs(existingReach - newChannelReach) <= reachTolerance;
+            const existingNewPercent = existing.newCostShare || 0;
+            const existingIncrementalImpactPercent = existing.incrementalImpactPercent || 0;
+            
+            // Normalize differences (use max values to normalize)
+            const maxReach = Math.max(...existingChannels.map(c => c.SyncReach || 0), newChannelReach);
+            const maxNewPercent = Math.max(...existingChannels.map(c => c.newCostShare || 0), newChannelNewPercent);
+            
+            const reachDiff = Math.abs(existingReach - newChannelReach) / (maxReach || 1);
+            const costPercentDiff = Math.abs(existingNewPercent - newChannelNewPercent) / (maxNewPercent || 1);
+            
+            // Combined similarity factor (higher = more similar)
+            const similarityFactor = (1 - Math.min(reachDiff, 1)) * (1 - Math.min(costPercentDiff, 1));
+            
+            return {
+              channel: existing,
+              similarityFactor,
+              incrementalImpactPercent: existingIncrementalImpactPercent
+            };
           });
           
-          if (similarChannels.length > 0) {
-            // Calculate averages of similar channels' metrics
-            const avgIncrementalImpactPercent = similarChannels.reduce((sum, c) => 
-              sum + (c.incrementalImpactPercent || 0), 0) / similarChannels.length;
+          // Sort by similarity factor (descending - most similar first)
+          channelsWithFactors.sort((a, b) => b.similarityFactor - a.similarityFactor);
+          
+          // Take nearest 2 channels for linear interpolation
+          if (channelsWithFactors.length >= 2 && channelsWithFactors[0].similarityFactor > 0.1) {
+            const nearest1 = channelsWithFactors[0];
+            const nearest2 = channelsWithFactors[1];
             
-            const avgOldPercent = similarChannels.reduce((sum, c) => 
-              sum + (c.originalCostShare || 0), 0) / similarChannels.length;
+            // Linear interpolation based on similarity factors
+            const factor1 = nearest1.similarityFactor;
+            const factor2 = nearest2.similarityFactor;
+            const totalFactor = factor1 + factor2;
             
-            const avgNewPercent = similarChannels.reduce((sum, c) => 
-              sum + (c.newCostShare || 0), 0) / similarChannels.length;
-            
-            const avgReach = similarChannels.reduce((sum, c) => 
-              sum + (c.SyncReach || 0), 0) / similarChannels.length;
-            
-            // Calculate NEW channel's % of Incremental Impact using cost %-based scaling with reach adjustment
-            if (avgNewPercent > 0 && avgReach > 0) {
-              // Base calculation: scale by cost % ratio
-              const costBasedValue = (newChannel.newCostShare / avgNewPercent) * avgIncrementalImpactPercent;
+            if (totalFactor > 0) {
+              const weight1 = factor1 / totalFactor;
+              const weight2 = factor2 / totalFactor;
               
-              // Adjust by reach ratio
-              const reachRatio = newChannelReach / avgReach;
-              newChannel.incrementalImpactPercent = costBasedValue * reachRatio;
+              // Weighted average of the two nearest channels' incremental impact %
+              newChannel.incrementalImpactPercent = 
+                (nearest1.incrementalImpactPercent * weight1) + 
+                (nearest2.incrementalImpactPercent * weight2);
             } else {
-              // Fallback: use reach-based method
-              if (totalNewChannelsReach > 0) {
-                const reachShare = newChannelReach / totalNewChannelsReach;
-                newChannel.incrementalImpactPercent = totalNEWImpactBudgetPercent * reachShare;
-              }
+              // Fallback: use original calculated value
+              newChannel.incrementalImpactPercent = (newChannel.incrementalImpact / totalImpact) * 100;
             }
+          } else if (channelsWithFactors.length >= 1 && channelsWithFactors[0].similarityFactor > 0.1) {
+            // Only one similar channel found, use its value directly
+            newChannel.incrementalImpactPercent = channelsWithFactors[0].incrementalImpactPercent;
           } else {
-            // No similar channels found: fallback to reach-based method
-            if (totalNewChannelsReach > 0) {
-              const reachShare = newChannelReach / totalNewChannelsReach;
-              newChannel.incrementalImpactPercent = totalNEWImpactBudgetPercent * reachShare;
-            }
+            // No similar channels found: fallback to original calculated value
+            newChannel.incrementalImpactPercent = (newChannel.incrementalImpact / totalImpact) * 100;
           }
         });
       }
@@ -674,6 +688,50 @@ export default function TVCampaignOptimizer() {
           channel.incrementalImpactPercent = 0;
         }
       });
+
+      // Apply dampening factor for very high % of Incremental Impact values
+      // Cap individual channel contributions to prevent unrealistic values
+      const MAX_CHANNEL_INCREMENTAL_IMPACT = 5.0; // Cap at 5% per channel
+      const DAMPENING_THRESHOLD = 3.0; // Start dampening above 3%
+      
+      finalChannels.forEach(channel => {
+        const absValue = Math.abs(channel.incrementalImpactPercent || 0);
+        
+        if (absValue > DAMPENING_THRESHOLD) {
+          // Apply dampening: values above threshold are reduced
+          // Formula: dampened = threshold + (value - threshold) * dampening_factor
+          const excess = absValue - DAMPENING_THRESHOLD;
+          const dampeningFactor = Math.max(0.3, 1 - (excess / (MAX_CHANNEL_INCREMENTAL_IMPACT - DAMPENING_THRESHOLD)));
+          const dampenedValue = DAMPENING_THRESHOLD + (excess * dampeningFactor);
+          
+          // Cap at maximum
+          const finalValue = Math.min(dampenedValue, MAX_CHANNEL_INCREMENTAL_IMPACT);
+          
+          // Preserve sign
+          channel.incrementalImpactPercent = channel.incrementalImpactPercent >= 0 ? finalValue : -finalValue;
+        }
+      });
+      
+      // After dampening, redistribute to maintain total sum
+      const channelsWithImpactAfterDampening = finalChannels.filter(c => 
+        (c.tag === 'INCREASE' || c.tag === 'DECREASE' || c.tag === 'NEW' || c.tag === 'DROPPED') &&
+        c.incrementalImpactPercent != null
+      );
+      
+      const sumAfterDampening = channelsWithImpactAfterDampening.reduce((sum, c) => 
+        sum + (c.incrementalImpactPercent || 0), 0);
+      
+      // Redistribute the difference proportionally
+      if (Math.abs(sumAfterDampening - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterDampening) > 0.01) {
+        const adjustmentFactor = expectedImprovementPercent / sumAfterDampening;
+        
+        channelsWithImpactAfterDampening.forEach(channel => {
+          const currentValue = channel.incrementalImpactPercent || 0;
+          const sign = currentValue >= 0 ? 1 : -1;
+          const magnitude = Math.abs(currentValue);
+          channel.incrementalImpactPercent = sign * magnitude * adjustmentFactor;
+        });
+      }
 
       // Filter out channels with negligible spend
       const activeChannels = finalChannels.filter(c => c.newCost > 1000 || c.originalCost > 0);
