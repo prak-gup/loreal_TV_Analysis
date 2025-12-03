@@ -766,18 +766,135 @@ export default function TVCampaignOptimizer() {
       }
       
       // Redistribute after general dampening to maintain total sum
+      // Use Reach % as a weight factor to create meaningful differences between channels
       const sumAfterGeneralDampening = channelsWithImpact.reduce((sum, c) => 
         sum + (c.incrementalImpactPercent || 0), 0);
       
+      // Calculate Reach % weights for differentiation (calculate once, use in all redistribution steps)
+      const totalReach = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
+      
+      // Store normalized Reach % weight for each channel
+      channelsWithImpact.forEach(channel => {
+        channel._normalizedReach = totalReach > 0 ? (channel.SyncReach || 0) / totalReach : 0;
+      });
+      
       if (Math.abs(sumAfterGeneralDampening - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterGeneralDampening) > 0.01) {
-        const adjustmentFactor = expectedImprovementPercent / sumAfterGeneralDampening;
+        // Use stronger Reach % weighting for more visible differences
+        const REACH_WEIGHT_FACTOR = 2.5; // Increased from 0.6 to 2.5 for stronger differentiation
         
-        channelsWithImpact.forEach(channel => {
+        // Calculate weighted magnitudes using Reach % as a factor
+        const weightedMagnitudes = channelsWithImpact.map(channel => {
           const currentValue = channel.incrementalImpactPercent || 0;
           const magnitude = Math.abs(currentValue);
-          const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
-          channel.incrementalImpactPercent = enforcedSign * magnitude * adjustmentFactor;
+          const normalizedReach = channel._normalizedReach || 0;
+          
+          // Weighted magnitude: combine current magnitude with Reach % influence
+          // Higher Reach % channels get proportionally larger shares
+          const weightedMagnitude = magnitude * (1 + normalizedReach * REACH_WEIGHT_FACTOR);
+          
+          return {
+            channel,
+            weightedMagnitude,
+            enforcedSign: (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1
+          };
         });
+        
+        // Calculate sum of weighted magnitudes
+        const sumOfWeightedMagnitudes = weightedMagnitudes.reduce((sum, w) => sum + w.weightedMagnitude, 0);
+        
+        // Redistribute based on weighted magnitudes
+        if (sumOfWeightedMagnitudes > 0) {
+          weightedMagnitudes.forEach(({ channel, weightedMagnitude, enforcedSign }) => {
+            // Calculate share based on weighted magnitude
+            const share = weightedMagnitude / sumOfWeightedMagnitudes;
+            const newValue = expectedImprovementPercent * share;
+            
+            // Apply enforced sign
+            channel.incrementalImpactPercent = enforcedSign * Math.abs(newValue);
+          });
+        } else {
+          // Fallback to simple proportional scaling if no weighted magnitudes
+          const adjustmentFactor = expectedImprovementPercent / sumAfterGeneralDampening;
+          
+          channelsWithImpact.forEach(channel => {
+            const currentValue = channel.incrementalImpactPercent || 0;
+            const magnitude = Math.abs(currentValue);
+            const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+            channel.incrementalImpactPercent = enforcedSign * magnitude * adjustmentFactor;
+          });
+        }
+        
+        // Re-enforce 30% cap after redistribution (in case redistribution pushed values above cap)
+        const MAX_CHANNEL_IMPACT_AFTER_REDIST = 32.5; // Cap at 32.5% (middle of 30-35% range)
+        channelsWithImpact.forEach(channel => {
+          const currentValue = channel.incrementalImpactPercent || 0;
+          const absValue = Math.abs(currentValue);
+          
+          if (absValue > MAX_CHANNEL_IMPACT_AFTER_REDIST) {
+            const cappedValue = MAX_CHANNEL_IMPACT_AFTER_REDIST;
+            const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+            channel.incrementalImpactPercent = enforcedSign * cappedValue;
+          }
+        });
+        
+        // Final redistribution to ensure sum matches after capping
+        // CRITICAL: Use Reach %-weighted scaling here too, not simple proportional scaling
+        // This preserves the differentiation we created earlier
+        const sumAfterCapping = channelsWithImpact.reduce((sum, c) => 
+          sum + (c.incrementalImpactPercent || 0), 0);
+        
+        if (Math.abs(sumAfterCapping - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterCapping) > 0.01) {
+          // Use Reach %-weighted scaling in final redistribution (slightly lower factor to maintain proportions)
+          const FINAL_REACH_WEIGHT_FACTOR = 1.5; // Lower than initial 2.5 to maintain existing proportions
+          
+          // Calculate weighted magnitudes using Reach % for final redistribution
+          const finalWeightedMagnitudes = channelsWithImpact.map(channel => {
+            const currentValue = channel.incrementalImpactPercent || 0;
+            const magnitude = Math.abs(currentValue);
+            const normalizedReach = channel._normalizedReach || 0;
+            
+            // Weighted magnitude: combine current magnitude with Reach % influence
+            const weightedMagnitude = magnitude * (1 + normalizedReach * FINAL_REACH_WEIGHT_FACTOR);
+            
+            return {
+              channel,
+              weightedMagnitude,
+              enforcedSign: (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1
+            };
+          });
+          
+          // Calculate sum of weighted magnitudes
+          const sumOfFinalWeightedMagnitudes = finalWeightedMagnitudes.reduce((sum, w) => sum + w.weightedMagnitude, 0);
+          
+          if (sumOfFinalWeightedMagnitudes > 0) {
+            // Redistribute based on weighted magnitudes
+            finalWeightedMagnitudes.forEach(({ channel, weightedMagnitude, enforcedSign }) => {
+              // Calculate share based on weighted magnitude
+              const share = weightedMagnitude / sumOfFinalWeightedMagnitudes;
+              const newValue = expectedImprovementPercent * share;
+              
+              // Cap at max if needed
+              const finalValue = Math.min(Math.abs(newValue), MAX_CHANNEL_IMPACT_AFTER_REDIST);
+              
+              // Apply enforced sign
+              channel.incrementalImpactPercent = enforcedSign * finalValue;
+            });
+          } else {
+            // Fallback to simple proportional scaling if no weighted magnitudes
+            const finalAdjustmentFactor = expectedImprovementPercent / sumAfterCapping;
+            
+            channelsWithImpact.forEach(channel => {
+              const currentValue = channel.incrementalImpactPercent || 0;
+              const magnitude = Math.abs(currentValue);
+              const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+              const adjustedValue = magnitude * finalAdjustmentFactor;
+              
+              // Cap again if needed
+              const finalValue = Math.min(adjustedValue, MAX_CHANNEL_IMPACT_AFTER_REDIST);
+              channel.incrementalImpactPercent = enforcedSign * finalValue;
+            });
+          }
+        }
       }
 
       // Apply dampening factor for very high % of Incremental Impact values (HSM only)
