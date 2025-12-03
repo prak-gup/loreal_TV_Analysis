@@ -1039,9 +1039,11 @@ export default function TVCampaignOptimizer() {
             return (Math.abs(hash) % 10000) / 10000;
           };
 
-          // Apply Reach %-based variation: 3-4% adjustment
-          const VARIATION_RANGE = 3.5; // Base variation range
+          // Apply Reach %-based variation: create proportional differences based on Reach %
+          // This ensures differences are preserved even after final scaling
+          const VARIATION_RANGE = 0.4; // 0.3 to 0.5 multiplier range (30-50% variation)
           
+          // First, calculate base values with Reach %-based multipliers
           channelsWithImpactFinal.forEach(channel => {
             const currentValue = channel.incrementalImpactPercent || 0;
             const absValue = Math.abs(currentValue);
@@ -1050,15 +1052,15 @@ export default function TVCampaignOptimizer() {
             // Generate deterministic random value
             const randomSeed = seededRandom(channel, selectedRegion);
             
-            // Variation: 3-4% range, influenced by Reach %
-            // Higher Reach % channels get more variation
-            const baseVariation = VARIATION_RANGE * (0.85 + randomSeed * 0.3); // ~3.0% to 4.0% range
-            const reachMultiplier = 1 + (normalizedReach * 0.5); // Reach % influence
-            const variation = baseVariation * reachMultiplier;
+            // Create multiplier based on Reach %: higher Reach % = higher multiplier
+            // Range: 0.7 to 1.3 (30% variation range)
+            const baseMultiplier = 1.0 + VARIATION_RANGE * (randomSeed - 0.5); // 0.8 to 1.2
+            const reachInfluence = normalizedReach * 0.3; // Reach % adds up to 30% more
+            const finalMultiplier = baseMultiplier + reachInfluence; // 0.8 to 1.5 range
             
-            // Apply variation based on sign
+            // Apply multiplier to create proportional differences
             const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
-            let adjustedValue = absValue + (variation * enforcedSign);
+            let adjustedValue = absValue * finalMultiplier;
             
             // Cap at 30% max, ensure not negative
             adjustedValue = Math.min(Math.max(adjustedValue, 0), 30.0);
@@ -1066,12 +1068,12 @@ export default function TVCampaignOptimizer() {
             channel.incrementalImpactPercent = enforcedSign * adjustedValue;
           });
           
-          // Minimal adjustment to match sum (preserve differences as much as possible)
+          // Scale to match sum while preserving relative differences (proportional scaling preserves ratios)
           const sumAfterVariation = channelsWithImpactFinal.reduce((sum, c) => 
             sum + (c.incrementalImpactPercent || 0), 0);
           
           if (Math.abs(sumAfterVariation - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterVariation) > 0.01) {
-            // Small adjustment factor to match sum while preserving relative differences
+            // Proportional scaling preserves relative differences
             const adjustmentFactor = expectedImprovementPercent / sumAfterVariation;
             
             channelsWithImpactFinal.forEach(channel => {
