@@ -425,29 +425,58 @@ export default function TVCampaignOptimizer() {
       }, 0);
       const newGRP = calculateNewMetric(finalChannels, 'GRP');
 
-      const totalOriginalImpactForShare = finalChannels.reduce((sum, c) => {
+      // Combined Impact+Reach score for impact distribution
+      const totalImpactForShare = finalChannels.reduce((sum, c) => {
         const imp = c.Impact || 0;
         return sum + (imp > 0 ? imp : 0);
       }, 0);
+      const totalReachForShare = finalChannels.reduce((sum, c) => {
+        const r = c.SyncReach || 0;
+        return sum + (r > 0 ? r : 0);
+      }, 0);
       const totalNewImpact = newImpact || 0;
 
-      if (totalOriginalImpactForShare > 0 && totalNewImpact > 0) {
+      if (totalImpactForShare > 0 && totalReachForShare > 0 && totalNewImpact > 0) {
+        let totalCombinedScore = 0;
+
         finalChannels.forEach(channel => {
           const impact = channel.Impact || 0;
-          const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : impact;
+          const reach = channel.SyncReach || 0;
 
-          let baseShare = impact > 0 ? (impact / totalOriginalImpactForShare) * 100 : 0;
-          let newShare = estNewImpact > 0 ? (estNewImpact / totalNewImpact) * 100 : 0;
+          const impactPart = impact > 0 ? (impact / totalImpactForShare) : 0;
+          const reachPart = reach > 0 ? (reach / totalReachForShare) : 0;
 
-          channel.baseImpactShare = baseShare;
-          channel.newImpactShare = newShare;
-
-          if (baseShare === 0 || channel.tag === 'UNCHANGED') {
-            channel.impactShareChangePercent = 0;
-          } else {
-            channel.impactShareChangePercent = ((newShare - baseShare) / baseShare) * 100;
-          }
+          // Simple average of normalized impact and reach
+          const combinedScore = (impactPart + reachPart) / 2;
+          channel._impactBaseScore = combinedScore;
+          totalCombinedScore += combinedScore;
         });
+
+        if (totalCombinedScore > 0) {
+          finalChannels.forEach(channel => {
+            const impact = channel.Impact || 0;
+            const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : impact;
+            const baseScore = channel._impactBaseScore || 0;
+
+            const baseShare = baseScore > 0 ? (baseScore / totalCombinedScore) * 100 : 0;
+            const newShare = estNewImpact > 0 ? (estNewImpact / totalNewImpact) * 100 : 0;
+
+            channel.baseImpactShare = baseShare;
+            channel.newImpactShare = newShare;
+
+            if (baseShare === 0 || channel.tag === 'UNCHANGED') {
+              channel.impactShareChangePercent = 0;
+            } else {
+              channel.impactShareChangePercent = ((newShare - baseShare) / baseShare) * 100;
+            }
+          });
+        } else {
+          finalChannels.forEach(channel => {
+            channel.baseImpactShare = 0;
+            channel.newImpactShare = 0;
+            channel.impactShareChangePercent = 0;
+          });
+        }
       } else {
         finalChannels.forEach(channel => {
           channel.baseImpactShare = 0;
