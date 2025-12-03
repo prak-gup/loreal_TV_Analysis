@@ -643,9 +643,9 @@ export default function TVCampaignOptimizer() {
       const correctedSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
       
       // Calculate Reach % weights BEFORE first redistribution to create differentiation from the start
-      const totalReach = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
+      const totalReachForImpact = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
       channelsWithImpact.forEach(channel => {
-        channel._normalizedReach = totalReach > 0 ? (channel.SyncReach || 0) / totalReach : 0;
+        channel._normalizedReach = totalReachForImpact > 0 ? (channel.SyncReach || 0) / totalReachForImpact : 0;
       });
       
       // If there's a difference, redistribute using Reach %-weighted scaling to create differentiation
@@ -743,10 +743,13 @@ export default function TVCampaignOptimizer() {
       const MAX_CHANNEL_IMPACT = 32.5; // Cap at 32.5% (middle of 30-35% range)
       
       // Calculate Reach % weights BEFORE dampening so we can use them during dampening
-      const totalReach = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
-      channelsWithImpact.forEach(channel => {
-        channel._normalizedReach = totalReach > 0 ? (channel.SyncReach || 0) / totalReach : 0;
-      });
+      // Reuse totalReach if already calculated, otherwise calculate it
+      if (!channelsWithImpact[0]?._normalizedReach) {
+        const totalReachForDampening = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
+        channelsWithImpact.forEach(channel => {
+          channel._normalizedReach = totalReachForDampening > 0 ? (channel.SyncReach || 0) / totalReachForDampening : 0;
+        });
+      }
       
       if (absExpectedImprovement > 0 && channelsWithImpact.length > 0) {
         // Step 1: Always cap individual channels at MAX_CHANNEL_IMPACT (30-35%)
@@ -1021,11 +1024,7 @@ export default function TVCampaignOptimizer() {
         if (channelsWithImpactFinal.length > 0) {
           // Calculate Reach % weights if not already calculated
           const totalReachFinal = channelsWithImpactFinal.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
-          channelsWithImpactFinal.forEach(channel => {
-            if (!channel._normalizedReach) {
-              channel._normalizedReach = totalReachFinal > 0 ? (channel.SyncReach || 0) / totalReachFinal : 0;
-            }
-          });
+          const maxReach = Math.max(...channelsWithImpactFinal.map(c => c.SyncReach || 0), 1);
           
           // Deterministic seeded random function based on channel properties
           const seededRandom = (channel, region) => {
@@ -1039,51 +1038,102 @@ export default function TVCampaignOptimizer() {
             return (Math.abs(hash) % 10000) / 10000;
           };
 
-          // Apply Reach %-based variation: create proportional differences based on Reach %
-          // This ensures differences are preserved even after final scaling
-          const VARIATION_RANGE = 0.4; // 0.3 to 0.5 multiplier range (30-50% variation)
+          // Store original values before variation
+          const originalValues = channelsWithImpactFinal.map(c => ({
+            channel: c,
+            originalValue: c.incrementalImpactPercent || 0,
+            absOriginal: Math.abs(c.incrementalImpactPercent || 0)
+          }));
+
+          // Calculate average base value for reference
+          const avgBaseValue = originalValues.reduce((sum, v) => sum + v.absOriginal, 0) / originalValues.length;
           
-          // First, calculate base values with Reach %-based multipliers
+          // Apply direct +/- 3-5% variation based on Reach %
+          // Higher Reach % channels get more variation (closer to 5%), lower Reach % get less (closer to 3%)
           channelsWithImpactFinal.forEach(channel => {
             const currentValue = channel.incrementalImpactPercent || 0;
             const absValue = Math.abs(currentValue);
-            const normalizedReach = channel._normalizedReach || 0;
+            const channelReach = channel.SyncReach || 0;
+            const normalizedReach = channelReach / maxReach; // 0 to 1
             
-            // Generate deterministic random value
+            // Generate deterministic random value (-1 to 1)
             const randomSeed = seededRandom(channel, selectedRegion);
+            const randomDirection = (randomSeed - 0.5) * 2; // -1 to 1
             
-            // Create multiplier based on Reach %: higher Reach % = higher multiplier
-            // Range: 0.7 to 1.3 (30% variation range)
-            const baseMultiplier = 1.0 + VARIATION_RANGE * (randomSeed - 0.5); // 0.8 to 1.2
-            const reachInfluence = normalizedReach * 0.3; // Reach % adds up to 30% more
-            const finalMultiplier = baseMultiplier + reachInfluence; // 0.8 to 1.5 range
+            // Variation range: 3% to 5% based on Reach %
+            // Higher Reach % = closer to 5%, Lower Reach % = closer to 3%
+            const minVariation = 3.0;
+            const maxVariation = 5.0;
+            const variationAmount = minVariation + (maxVariation - minVariation) * normalizedReach;
             
-            // Apply multiplier to create proportional differences
+            // Apply variation: add/subtract based on random direction
+            // Scale variation by the base value to keep it proportional
+            const variationFactor = (variationAmount / 100) * (absValue > 0 ? absValue : avgBaseValue);
+            const variation = randomDirection * variationFactor;
+            
+            // Apply variation to absolute value
+            let adjustedValue = absValue + variation;
+            
+            // Ensure we don't go negative
+            adjustedValue = Math.max(adjustedValue, 0.1);
+            
+            // Cap at 35% max
+            adjustedValue = Math.min(adjustedValue, 35.0);
+            
+            // Apply enforced sign
             const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
-            let adjustedValue = absValue * finalMultiplier;
-            
-            // Cap at 30% max, ensure not negative
-            adjustedValue = Math.min(Math.max(adjustedValue, 0), 30.0);
-            
             channel.incrementalImpactPercent = enforcedSign * adjustedValue;
           });
           
-          // Scale to match sum while preserving relative differences (proportional scaling preserves ratios)
+          // Calculate sum after variation
           const sumAfterVariation = channelsWithImpactFinal.reduce((sum, c) => 
             sum + (c.incrementalImpactPercent || 0), 0);
           
+          // Adjust to match expected sum while preserving relative differences
           if (Math.abs(sumAfterVariation - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterVariation) > 0.01) {
-            // Proportional scaling preserves relative differences
-            const adjustmentFactor = expectedImprovementPercent / sumAfterVariation;
+            // Calculate adjustment needed
+            const difference = expectedImprovementPercent - sumAfterVariation;
             
-            channelsWithImpactFinal.forEach(channel => {
-              const currentValue = channel.incrementalImpactPercent || 0;
-              const magnitude = Math.abs(currentValue);
-              const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
-              const adjustedValue = magnitude * adjustmentFactor;
-              const finalValue = Math.min(adjustedValue, 30.0);
-              channel.incrementalImpactPercent = enforcedSign * finalValue;
-            });
+            // Distribute the difference proportionally based on current magnitudes
+            const totalMagnitude = channelsWithImpactFinal.reduce((sum, c) => 
+              sum + Math.abs(c.incrementalImpactPercent || 0), 0);
+            
+            if (totalMagnitude > 0) {
+              channelsWithImpactFinal.forEach(channel => {
+                const currentValue = channel.incrementalImpactPercent || 0;
+                const absValue = Math.abs(currentValue);
+                const share = absValue / totalMagnitude;
+                const adjustment = difference * share;
+                
+                // Apply adjustment
+                const newValue = currentValue + adjustment;
+                const newAbsValue = Math.abs(newValue);
+                
+                // Cap at 35% max
+                const cappedValue = Math.min(newAbsValue, 35.0);
+                
+                // Enforce sign
+                const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+                channel.incrementalImpactPercent = enforcedSign * cappedValue;
+              });
+              
+              // Final check: if sum still doesn't match, do one more proportional adjustment
+              const finalSum = channelsWithImpactFinal.reduce((sum, c) => 
+                sum + (c.incrementalImpactPercent || 0), 0);
+              
+              if (Math.abs(finalSum - expectedImprovementPercent) > 0.01) {
+                const finalAdjustmentFactor = expectedImprovementPercent / finalSum;
+                
+                channelsWithImpactFinal.forEach(channel => {
+                  const currentValue = channel.incrementalImpactPercent || 0;
+                  const magnitude = Math.abs(currentValue);
+                  const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+                  const adjustedValue = magnitude * finalAdjustmentFactor;
+                  const finalValue = Math.min(adjustedValue, 35.0);
+                  channel.incrementalImpactPercent = enforcedSign * finalValue;
+                });
+              }
+            }
           }
         }
       }
