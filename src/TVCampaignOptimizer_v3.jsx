@@ -642,18 +642,54 @@ export default function TVCampaignOptimizer() {
       // Recalculate sum after forcing correct signs
       const correctedSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
       
-      // If there's a difference, redistribute proportionally while preserving enforced signs
+      // Calculate Reach % weights BEFORE first redistribution to create differentiation from the start
+      const totalReach = channelsWithImpact.reduce((sum, c) => sum + (c.SyncReach || 0), 0);
+      channelsWithImpact.forEach(channel => {
+        channel._normalizedReach = totalReach > 0 ? (channel.SyncReach || 0) / totalReach : 0;
+      });
+      
+      // If there's a difference, redistribute using Reach %-weighted scaling to create differentiation
       if (Math.abs(correctedSum - expectedImprovementPercent) > 0.01 && Math.abs(correctedSum) > 0.01) {
-        // Calculate scaling factor - use absolute values to preserve signs
-        const scalingFactor = Math.abs(expectedImprovementPercent) / Math.abs(correctedSum);
+        // Use Reach %-weighted scaling instead of simple proportional scaling
+        const INITIAL_REACH_WEIGHT_FACTOR = 3.0; // Strong factor to create visible differences from the start
         
-        // Scale magnitudes while preserving enforced signs
-        channelsWithImpact.forEach(channel => {
+        // Calculate weighted magnitudes using Reach %
+        const initialWeightedMagnitudes = channelsWithImpact.map(channel => {
           const currentValue = channel.incrementalImpactPercent || 0;
           const magnitude = Math.abs(currentValue);
-          const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
-          channel.incrementalImpactPercent = enforcedSign * magnitude * scalingFactor;
+          const normalizedReach = channel._normalizedReach || 0;
+          
+          // Weighted magnitude: higher Reach % channels get larger shares
+          const weightedMagnitude = magnitude * (1 + normalizedReach * INITIAL_REACH_WEIGHT_FACTOR);
+          
+          return {
+            channel,
+            weightedMagnitude,
+            enforcedSign: (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1
+          };
         });
+        
+        // Calculate sum of weighted magnitudes
+        const sumOfInitialWeightedMagnitudes = initialWeightedMagnitudes.reduce((sum, w) => sum + w.weightedMagnitude, 0);
+        
+        if (sumOfInitialWeightedMagnitudes > 0) {
+          // Redistribute based on weighted magnitudes
+          initialWeightedMagnitudes.forEach(({ channel, weightedMagnitude, enforcedSign }) => {
+            const share = weightedMagnitude / sumOfInitialWeightedMagnitudes;
+            const newValue = expectedImprovementPercent * share;
+            channel.incrementalImpactPercent = enforcedSign * Math.abs(newValue);
+          });
+        } else {
+          // Fallback to simple proportional scaling if no weighted magnitudes
+          const scalingFactor = Math.abs(expectedImprovementPercent) / Math.abs(correctedSum);
+          
+          channelsWithImpact.forEach(channel => {
+            const currentValue = channel.incrementalImpactPercent || 0;
+            const magnitude = Math.abs(currentValue);
+            const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+            channel.incrementalImpactPercent = enforcedSign * magnitude * scalingFactor;
+          });
+        }
         
         // Adjust the sum to match exactly by distributing the remainder proportionally
         const newSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
