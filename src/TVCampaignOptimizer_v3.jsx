@@ -405,6 +405,13 @@ export default function TVCampaignOptimizer() {
             channel.tag = 'UNCHANGED';
           }
         }
+
+        // For UNCHANGED channels, snap display values back to original
+        if (channel.tag === 'UNCHANGED') {
+          channel.newCostShare = channel.originalCostShare;
+          channel.change = 0;
+          channel.changePercent = 0;
+        }
       });
 
       // Calculate new metrics
