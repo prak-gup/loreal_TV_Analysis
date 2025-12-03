@@ -445,17 +445,17 @@ export default function TVCampaignOptimizer() {
           channel.baseImpactShare = baseShare;
           channel.newImpactShare = newShare;
 
-          if (channel.tag === 'UNCHANGED') {
-            channel.deltaImpactSharePp = 0;
+          if (baseShare === 0 || channel.tag === 'UNCHANGED') {
+            channel.impactShareChangePercent = 0;
           } else {
-            channel.deltaImpactSharePp = newShare - baseShare;
+            channel.impactShareChangePercent = ((newShare - baseShare) / baseShare) * 100;
           }
         });
       } else {
         finalChannels.forEach(channel => {
           channel.baseImpactShare = 0;
           channel.newImpactShare = 0;
-          channel.deltaImpactSharePp = 0;
+          channel.impactShareChangePercent = 0;
         });
       }
 
@@ -512,9 +512,8 @@ export default function TVCampaignOptimizer() {
       'New Cost',
       'New %',
       'Change %',
-      'Impact Share Base %',
-      'Impact Share New %',
-      'Impact Δ (pp)'
+      'Impact % Current',
+      'Impact % Change'
     ];
 
     const csvRows = optimized.channels.map(channel => [
@@ -529,8 +528,14 @@ export default function TVCampaignOptimizer() {
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
       channel.baseImpactShare?.toFixed(1),
-      channel.newImpactShare?.toFixed(1),
-      channel.deltaImpactSharePp?.toFixed(1)
+      (() => {
+        const base = channel.baseImpactShare || 0;
+        const raw = channel.impactShareChangePercent || 0;
+        if (channel.tag === 'UNCHANGED' || base === 0) return '0.0';
+        if (raw > 30) return '30.0';
+        if (raw < -30) return '-30.0';
+        return raw.toFixed(1);
+      })()
     ]);
 
     const csvContent = [
@@ -666,8 +671,8 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact % (Base → New)</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Δ Impact (pp)</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact % (Current)</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Impact Change</th>
             </tr>
           </thead>
           <tbody>
@@ -707,12 +712,26 @@ export default function TVCampaignOptimizer() {
                     {channel.newCostShare?.toFixed(1)}%
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>
-                    {channel.baseImpactShare > 0 || channel.newImpactShare > 0
-                      ? `${channel.baseImpactShare.toFixed(1)}% → ${channel.newImpactShare.toFixed(1)}%`
+                    {channel.baseImpactShare > 0
+                      ? `${channel.baseImpactShare.toFixed(1)}%`
                       : '—'}
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', color: changeColor, fontWeight: 700 }}>
-                    {channel.deltaImpactSharePp > 0 ? '+' : ''}{channel.deltaImpactSharePp?.toFixed(1)}
+                  <td style={{ padding: '12px 10px', textAlign: 'right', color: (() => {
+                    const raw = channel.impactShareChangePercent || 0;
+                    if (channel.tag === 'UNCHANGED' || channel.baseImpactShare === 0) return COLORS.muted;
+                    if (raw > 0) return COLORS.success;
+                    if (raw < 0) return COLORS.danger;
+                    return COLORS.muted;
+                  })(), fontWeight: 700 }}>
+                    {(() => {
+                      const base = channel.baseImpactShare || 0;
+                      const raw = channel.impactShareChangePercent || 0;
+                      if (channel.tag === 'UNCHANGED' || base === 0) return '—';
+                      if (raw > 30) return '>30%';
+                      if (raw < -30) return '<-30%';
+                      if (Math.abs(raw) < 0.1) return '0.0%';
+                      return `${raw > 0 ? '+' : ''}${raw.toFixed(1)}%`;
+                    })()}
                   </td>
                 </tr>
               );
