@@ -387,6 +387,17 @@ export default function TVCampaignOptimizer() {
           ? ((channel.newCost - channel.originalCost) / channel.originalCost) * 100
           : (channel.newCost > 0 ? 100 : 0);
 
+        const impact = channel.Impact || 0;
+        if (impact > 0 && channel.originalCost > 0) {
+          const impactPerCost = impact / channel.originalCost;
+          const newImpactEstimate = impactPerCost * channel.newCost;
+          channel.newImpactEstimate = newImpactEstimate;
+          channel.impactChangePercent = ((newImpactEstimate - impact) / impact) * 100;
+        } else {
+          channel.newImpactEstimate = impact;
+          channel.impactChangePercent = 0;
+        }
+
         if (channel.tag !== 'DROPPED' && channel.tag !== 'NEW') {
           if (channel.change > (channel.originalCost || 0) * 0.02) {
             channel.tag = 'INCREASE';
@@ -468,7 +479,8 @@ export default function TVCampaignOptimizer() {
       'Original %',
       'New Cost',
       'New %',
-      'Change %'
+      'Change %',
+      'Impact Change %'
     ];
 
     const csvRows = optimized.channels.map(channel => [
@@ -481,7 +493,8 @@ export default function TVCampaignOptimizer() {
       channel.originalCostShare?.toFixed(1),
       channel.newCost?.toFixed(0),
       channel.newCostShare?.toFixed(1),
-      channel.changePercent?.toFixed(1)
+      channel.changePercent?.toFixed(1),
+      channel.impactChangePercent?.toFixed(1)
     ]);
 
     const csvContent = [
@@ -617,6 +630,7 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Impact Change</th>
             </tr>
           </thead>
           <tbody>
@@ -657,6 +671,9 @@ export default function TVCampaignOptimizer() {
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', color: changeColor, fontWeight: 700 }}>
                     {channel.changePercent > 0 ? '+' : ''}{channel.changePercent?.toFixed(1)}%
+                  </td>
+                  <td style={{ padding: '12px 10px', textAlign: 'right', color: channel.impactChangePercent > 0 ? COLORS.success : channel.impactChangePercent < 0 ? COLORS.danger : COLORS.muted, fontWeight: 700 }}>
+                    {channel.impactChangePercent > 0 ? '+' : ''}{channel.impactChangePercent?.toFixed(1)}%
                   </td>
                 </tr>
               );
