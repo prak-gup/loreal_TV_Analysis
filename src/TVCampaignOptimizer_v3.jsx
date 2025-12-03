@@ -624,37 +624,35 @@ export default function TVCampaignOptimizer() {
       
       const currentSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
       
-      // Ensure signs match - if they don't, something is wrong with initial calculation
-      // Fix signs based on channel status before redistributing
+      // Force signs to match channel status (INCREASE/NEW = positive, DECREASE/DROPPED = negative)
+      // This ensures display matches the channel's cost change direction
       channelsWithImpact.forEach(channel => {
         const currentValue = channel.incrementalImpactPercent || 0;
+        const absValue = Math.abs(currentValue);
+        
         if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
-          // Should be positive
-          if (currentValue < 0) {
-            channel.incrementalImpactPercent = Math.abs(currentValue);
-          }
+          // Must be positive
+          channel.incrementalImpactPercent = absValue;
         } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
-          // Should be negative
-          if (currentValue > 0) {
-            channel.incrementalImpactPercent = -Math.abs(currentValue);
-          }
+          // Must be negative
+          channel.incrementalImpactPercent = -absValue;
         }
       });
       
-      // Recalculate sum after fixing signs
+      // Recalculate sum after forcing correct signs
       const correctedSum = channelsWithImpact.reduce((sum, c) => sum + (c.incrementalImpactPercent || 0), 0);
       
-      // If there's a difference, redistribute proportionally while preserving signs
+      // If there's a difference, redistribute proportionally while preserving enforced signs
       if (Math.abs(correctedSum - expectedImprovementPercent) > 0.01 && Math.abs(correctedSum) > 0.01) {
         // Calculate scaling factor - use absolute values to preserve signs
         const scalingFactor = Math.abs(expectedImprovementPercent) / Math.abs(correctedSum);
         
-        // Preserve the sign of each channel's value and scale the magnitude
+        // Scale magnitudes while preserving enforced signs
         channelsWithImpact.forEach(channel => {
           const currentValue = channel.incrementalImpactPercent || 0;
-          const sign = currentValue >= 0 ? 1 : -1;
           const magnitude = Math.abs(currentValue);
-          channel.incrementalImpactPercent = sign * magnitude * scalingFactor;
+          const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+          channel.incrementalImpactPercent = enforcedSign * magnitude * scalingFactor;
         });
         
         // Adjust the sum to match exactly by distributing the remainder proportionally
@@ -682,6 +680,18 @@ export default function TVCampaignOptimizer() {
         }
       }
       
+      // Final enforcement: ensure signs are correct after redistribution
+      channelsWithImpact.forEach(channel => {
+        const currentValue = channel.incrementalImpactPercent || 0;
+        const absValue = Math.abs(currentValue);
+        
+        if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+          channel.incrementalImpactPercent = absValue;
+        } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+          channel.incrementalImpactPercent = -absValue;
+        }
+      });
+      
       // Ensure UNCHANGED channels remain at 0
       finalChannels.forEach(channel => {
         if (channel.tag === 'UNCHANGED') {
@@ -708,8 +718,12 @@ export default function TVCampaignOptimizer() {
             // Cap at maximum
             const finalValue = Math.min(dampenedValue, MAX_CHANNEL_INCREMENTAL_IMPACT);
             
-            // Preserve sign
-            channel.incrementalImpactPercent = channel.incrementalImpactPercent >= 0 ? finalValue : -finalValue;
+            // Enforce sign based on channel status (not just preserve existing sign)
+            if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+              channel.incrementalImpactPercent = finalValue;
+            } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+              channel.incrementalImpactPercent = -finalValue;
+            }
           }
         });
         
@@ -728,11 +742,24 @@ export default function TVCampaignOptimizer() {
           
           channelsWithImpactAfterDampening.forEach(channel => {
             const currentValue = channel.incrementalImpactPercent || 0;
-            const sign = currentValue >= 0 ? 1 : -1;
             const magnitude = Math.abs(currentValue);
-            channel.incrementalImpactPercent = sign * magnitude * adjustmentFactor;
+            // Enforce sign based on channel status
+            const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+            channel.incrementalImpactPercent = enforcedSign * magnitude * adjustmentFactor;
           });
         }
+        
+        // Final enforcement after HSM dampening: ensure signs are correct
+        channelsWithImpactAfterDampening.forEach(channel => {
+          const currentValue = channel.incrementalImpactPercent || 0;
+          const absValue = Math.abs(currentValue);
+          
+          if (channel.tag === 'INCREASE' || channel.tag === 'NEW') {
+            channel.incrementalImpactPercent = absValue;
+          } else if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') {
+            channel.incrementalImpactPercent = -absValue;
+          }
+        });
       }
 
       // Filter out channels with negligible spend
