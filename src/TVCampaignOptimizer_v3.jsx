@@ -425,17 +425,37 @@ export default function TVCampaignOptimizer() {
       }, 0);
       const newGRP = calculateNewMetric(finalChannels, 'GRP');
 
-      const totalIncrementalImpact = newImpact - totalImpact;
-      if (Math.abs(totalIncrementalImpact) > 1e-6) {
+      const totalOriginalImpact = totalImpact || 0;
+      const totalNewImpact = newImpact || 0;
+      const MIN_IMPACT_SHARE = 0.5;
+
+      if (totalOriginalImpact > 0 && totalNewImpact > 0) {
         finalChannels.forEach(channel => {
-          const oldImpact = channel.Impact || 0;
-          const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : oldImpact;
-          const deltaImpact = estNewImpact - oldImpact;
-          channel.impactContributionPercent = (deltaImpact / totalIncrementalImpact) * 100;
+          const impact = channel.Impact || 0;
+          const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : impact;
+
+          let baseShare = impact > 0 ? (impact / totalOriginalImpact) * 100 : 0;
+          let newShare = estNewImpact > 0 ? (estNewImpact / totalNewImpact) * 100 : 0;
+
+          if (impact <= 0 || baseShare < MIN_IMPACT_SHARE) {
+            baseShare = 0;
+            newShare = 0;
+          }
+
+          channel.baseImpactShare = baseShare;
+          channel.newImpactShare = newShare;
+
+          if (channel.tag === 'UNCHANGED') {
+            channel.deltaImpactSharePp = 0;
+          } else {
+            channel.deltaImpactSharePp = newShare - baseShare;
+          }
         });
       } else {
         finalChannels.forEach(channel => {
-          channel.impactContributionPercent = 0;
+          channel.baseImpactShare = 0;
+          channel.newImpactShare = 0;
+          channel.deltaImpactSharePp = 0;
         });
       }
 
@@ -492,10 +512,10 @@ export default function TVCampaignOptimizer() {
       'New Cost',
       'New %',
       'Change %',
-      '% of Incremental Impact'
+      'Impact Share Base %',
+      'Impact Share New %',
+      'Impact Δ (pp)'
     ];
-
-    const totalIncrementalImpact = (optimized.totalImpact || 0) - (original.totalImpact || 0);
 
     const csvRows = optimized.channels.map(channel => [
       channel.Channel,
@@ -508,7 +528,9 @@ export default function TVCampaignOptimizer() {
       channel.newCost?.toFixed(0),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
-      channel.impactContributionPercent?.toFixed(1)
+      channel.baseImpactShare?.toFixed(1),
+      channel.newImpactShare?.toFixed(1),
+      channel.deltaImpactSharePp?.toFixed(1)
     ]);
 
     const csvContent = [
@@ -644,7 +666,8 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% of Incremental Impact</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact % (Base → New)</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Δ Impact (pp)</th>
             </tr>
           </thead>
           <tbody>
@@ -683,11 +706,13 @@ export default function TVCampaignOptimizer() {
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
                     {channel.newCostShare?.toFixed(1)}%
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', color: changeColor, fontWeight: 700 }}>
-                    {channel.changePercent > 0 ? '+' : ''}{channel.changePercent?.toFixed(1)}%
+                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>
+                    {channel.baseImpactShare > 0 || channel.newImpactShare > 0
+                      ? `${channel.baseImpactShare.toFixed(1)}% → ${channel.newImpactShare.toFixed(1)}%`
+                      : '—'}
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', color: channel.impactContributionPercent > 0 ? COLORS.success : channel.impactContributionPercent < 0 ? COLORS.danger : COLORS.muted, fontWeight: 700 }}>
-                    {channel.impactContributionPercent > 0 ? '+' : ''}{channel.impactContributionPercent?.toFixed(1)}%
+                  <td style={{ padding: '12px 10px', textAlign: 'right', color: changeColor, fontWeight: 700 }}>
+                    {channel.deltaImpactSharePp > 0 ? '+' : ''}{channel.deltaImpactSharePp?.toFixed(1)}
                   </td>
                 </tr>
               );
