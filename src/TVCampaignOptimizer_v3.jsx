@@ -6,7 +6,8 @@ const CONFIG = {
   HIGH_THRESHOLD_REACH_PERCENTILE: 70,
   HIGH_THRESHOLD_ADJUSTMENT_LIMIT: 0.10,
   MAX_CHANNEL_CONCENTRATION: 0.35,
-  MIN_ACTIVE_CHANNELS: 5
+  MIN_ACTIVE_CHANNELS: 5,
+  FTA_MAX_REDUCTION: 0.12
 };
 
 // Helper functions
@@ -140,7 +141,8 @@ export default function TVCampaignOptimizer() {
         impactReachScore: d.SyncReach > 0 ? d.Impact / d.SyncReach : 0,
         impactCostScore: d.Cost > 0 ? (d.Impact / d.Cost) * 1000000 : 0,
         costShare: 0,
-        isHighThreshold: false
+        isHighThreshold: false,
+        isFTA: (d.Genre || '').toLowerCase().includes('fta')
       }));
 
     if (channelsWithScores.length === 0) return null;
@@ -181,7 +183,8 @@ export default function TVCampaignOptimizer() {
       ...d,
       reachScore: d.SyncReach,
       impactReachScore: d.SyncReach > 0 ? d.Impact / d.SyncReach : 0,
-      impactCostScore: d.Cost > 0 ? (d.Impact / d.Cost) * 1000000 : 0
+      impactCostScore: d.Cost > 0 ? (d.Impact / d.Cost) * 1000000 : 0,
+      isFTA: (d.Genre || '').toLowerCase().includes('fta')
     }));
 
     return {
@@ -206,6 +209,62 @@ export default function TVCampaignOptimizer() {
 
     setTimeout(() => {
       const { channels, godrejChannels, totalCost, totalImpact, totalReach, learningSource } = analyzeChannels;
+
+      const applyReduction = (channel, reductionAmount) => {
+        if (reductionAmount <= 0) return 0;
+        let maxReduction = channel.newCost;
+        if (channel.isFTA && channel.originalCost > 0) {
+          const minAllowed = channel.originalCost * (1 - CONFIG.FTA_MAX_REDUCTION);
+          maxReduction = Math.max(0, channel.newCost - minAllowed);
+        }
+        const applied = Math.min(reductionAmount, maxReduction);
+        channel.newCost = Math.max(0, channel.newCost - applied);
+        return applied;
+      };
+
+      const enforceFTAMinimums = (channelList, attempt = 0) => {
+        let totalTopUp = 0;
+        channelList.forEach(channel => {
+          if (channel.isFTA && channel.originalCost > 0) {
+            const minAllowed = channel.originalCost * (1 - CONFIG.FTA_MAX_REDUCTION);
+            if (channel.newCost < minAllowed) {
+              const deficit = minAllowed - channel.newCost;
+              channel.newCost = minAllowed;
+              totalTopUp += deficit;
+            }
+          }
+        });
+
+        if (totalTopUp <= 0) return;
+
+        const adjustableChannels = channelList.filter(c => !c.isFTA && c.newCost > 0);
+        const totalAdjustableCost = adjustableChannels.reduce((sum, c) => sum + c.newCost, 0);
+        let remainingReduction = totalTopUp;
+
+        if (totalAdjustableCost > 0) {
+          adjustableChannels.forEach(channel => {
+            if (remainingReduction <= 0) return;
+            const share = channel.newCost / totalAdjustableCost;
+            const reduction = Math.min(channel.newCost, share * remainingReduction);
+            channel.newCost -= reduction;
+            remainingReduction -= reduction;
+          });
+        }
+
+        if (remainingReduction > 1e-6) {
+          const adjustedTotal = channelList.reduce((sum, c) => sum + c.newCost, 0);
+          if (adjustedTotal > 0) {
+            const normalization = totalCost / adjustedTotal;
+            channelList.forEach(channel => {
+              channel.newCost *= normalization;
+            });
+
+            if (attempt < 1) {
+              enforceFTAMinimums(channelList, attempt + 1);
+            }
+          }
+        }
+      };
 
       // Clone channels for optimization
       let optimizedChannels = channels.map(c => ({
@@ -234,6 +293,7 @@ export default function TVCampaignOptimizer() {
           change: 0,
           changePercent: 0,
           isHighThreshold: d.SyncReach > 5,
+          isFTA: (d.Genre || '').toLowerCase().includes('fta'),
           isNewFromLearning: true,
           tag: 'NEW'
         }))
@@ -258,7 +318,7 @@ export default function TVCampaignOptimizer() {
 
       optimizedChannels.forEach(channel => {
         if (!channel.isHighThreshold) {
-          if (channel.currentScore <= dropThreshold && optimizedChannels.filter(c => c.newCost > 0).length > CONFIG.MIN_ACTIVE_CHANNELS) {
+          if (!channel.isFTA && channel.currentScore <= dropThreshold && optimizedChannels.filter(c => c.newCost > 0).length > CONFIG.MIN_ACTIVE_CHANNELS) {
             // Drop this channel entirely
             budgetToReallocate += channel.newCost;
             channel.newCost = 0;
@@ -266,22 +326,19 @@ export default function TVCampaignOptimizer() {
           } else if (channel.currentScore < bottomTierThreshold) {
             // Reduce this channel significantly
             const reductionRate = Math.min(0.9, 0.5 * sensitivityFactor);
-            const reduction = channel.newCost * reductionRate;
-            channel.newCost -= reduction;
-            budgetToReallocate += reduction;
+            const appliedReduction = applyReduction(channel, channel.newCost * reductionRate);
+            budgetToReallocate += appliedReduction;
           } else if (channel.currentScore < topTierThreshold) {
             // Moderate reduction
             const reductionRate = Math.min(0.5, 0.25 * sensitivityFactor);
-            const reduction = channel.newCost * reductionRate;
-            channel.newCost -= reduction;
-            budgetToReallocate += reduction;
+            const appliedReduction = applyReduction(channel, channel.newCost * reductionRate);
+            budgetToReallocate += appliedReduction;
           }
         } else {
           // High threshold: only minor adjustments if low score
           if (channel.currentScore < bottomTierThreshold) {
-            const reduction = channel.newCost * CONFIG.HIGH_THRESHOLD_ADJUSTMENT_LIMIT;
-            channel.newCost -= reduction;
-            budgetToReallocate += reduction;
+            const appliedReduction = applyReduction(channel, channel.newCost * CONFIG.HIGH_THRESHOLD_ADJUSTMENT_LIMIT);
+            budgetToReallocate += appliedReduction;
           }
         }
       });
@@ -318,17 +375,21 @@ export default function TVCampaignOptimizer() {
 
       finalChannels.forEach(channel => {
         channel.newCost *= normalizationFactor;
+      });
+
+      enforceFTAMinimums(finalChannels);
+
+      finalChannels.forEach(channel => {
         channel.newCostShare = (channel.newCost / totalCost) * 100;
-        channel.change = channel.newCost - channel.originalCost;
+        channel.change = channel.newCost - (channel.originalCost || 0);
         channel.changePercent = channel.originalCost > 0
           ? ((channel.newCost - channel.originalCost) / channel.originalCost) * 100
           : (channel.newCost > 0 ? 100 : 0);
 
-        // Set tags
         if (channel.tag !== 'DROPPED' && channel.tag !== 'NEW') {
-          if (channel.change > channel.originalCost * 0.02) {
+          if (channel.change > (channel.originalCost || 0) * 0.02) {
             channel.tag = 'INCREASE';
-          } else if (channel.change < -channel.originalCost * 0.02) {
+          } else if (channel.change < -(channel.originalCost || 0) * 0.02) {
             channel.tag = 'DECREASE';
           } else {
             channel.tag = 'UNCHANGED';
@@ -1154,6 +1215,9 @@ export default function TVCampaignOptimizer() {
             border: '1px solid #e2e8f0'
           }}>
             <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700, color: COLORS.primary }}>Optimization Summary</h3>
+            <p style={{ margin: '0 0 16px', fontSize: 12, color: COLORS.muted }}>
+              FTA channels stay active — they can shift budget but are never dropped, and their spends are capped at a 12% reduction.
+            </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
               <div style={{ padding: 16, background: '#dcfce7', borderRadius: 8, textAlign: 'center' }}>
                 <div style={{ fontSize: 24, fontWeight: 800, color: '#166534' }}>{optimizedPlan.summary.increased}</div>
