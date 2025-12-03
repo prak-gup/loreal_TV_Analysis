@@ -1215,9 +1215,6 @@ export default function TVCampaignOptimizer() {
             border: '1px solid #e2e8f0'
           }}>
             <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700, color: COLORS.primary }}>Optimization Summary</h3>
-            <p style={{ margin: '0 0 16px', fontSize: 12, color: COLORS.muted }}>
-              FTA channels stay active — they can shift budget but are never dropped, and their spends are capped at a 12% reduction.
-            </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
               <div style={{ padding: 16, background: '#dcfce7', borderRadius: 8, textAlign: 'center' }}>
                 <div style={{ fontSize: 24, fontWeight: 800, color: '#166534' }}>{optimizedPlan.summary.increased}</div>
