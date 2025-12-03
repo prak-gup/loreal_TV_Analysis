@@ -392,10 +392,8 @@ export default function TVCampaignOptimizer() {
           const impactPerCost = impact / channel.originalCost;
           const newImpactEstimate = impactPerCost * channel.newCost;
           channel.newImpactEstimate = newImpactEstimate;
-          channel.impactChangePercent = ((newImpactEstimate - impact) / impact) * 100;
         } else {
           channel.newImpactEstimate = impact;
-          channel.impactChangePercent = 0;
         }
 
         if (channel.tag !== 'DROPPED' && channel.tag !== 'NEW') {
@@ -426,6 +424,20 @@ export default function TVCampaignOptimizer() {
         return sum + (c.SyncReach * Math.sqrt(costRatio));
       }, 0);
       const newGRP = calculateNewMetric(finalChannels, 'GRP');
+
+      const totalIncrementalImpact = newImpact - totalImpact;
+      if (Math.abs(totalIncrementalImpact) > 1e-6) {
+        finalChannels.forEach(channel => {
+          const oldImpact = channel.Impact || 0;
+          const estNewImpact = channel.newImpactEstimate != null ? channel.newImpactEstimate : oldImpact;
+          const deltaImpact = estNewImpact - oldImpact;
+          channel.impactContributionPercent = (deltaImpact / totalIncrementalImpact) * 100;
+        });
+      } else {
+        finalChannels.forEach(channel => {
+          channel.impactContributionPercent = 0;
+        });
+      }
 
       // Filter out channels with negligible spend
       const activeChannels = finalChannels.filter(c => c.newCost > 1000 || c.originalCost > 0);
@@ -468,7 +480,7 @@ export default function TVCampaignOptimizer() {
   const downloadCSV = () => {
     if (!optimizedPlan) return;
 
-    const { optimized } = optimizedPlan;
+    const { optimized, original } = optimizedPlan;
     const csvHeaders = [
       'Channel',
       'Status',
@@ -480,8 +492,10 @@ export default function TVCampaignOptimizer() {
       'New Cost',
       'New %',
       'Change %',
-      'Impact Change %'
+      '% of Incremental Impact'
     ];
+
+    const totalIncrementalImpact = (optimized.totalImpact || 0) - (original.totalImpact || 0);
 
     const csvRows = optimized.channels.map(channel => [
       channel.Channel,
@@ -494,7 +508,7 @@ export default function TVCampaignOptimizer() {
       channel.newCost?.toFixed(0),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
-      channel.impactChangePercent?.toFixed(1)
+      channel.impactContributionPercent?.toFixed(1)
     ]);
 
     const csvContent = [
@@ -630,7 +644,7 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Impact Change</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% of Incremental Impact</th>
             </tr>
           </thead>
           <tbody>
@@ -672,8 +686,8 @@ export default function TVCampaignOptimizer() {
                   <td style={{ padding: '12px 10px', textAlign: 'right', color: changeColor, fontWeight: 700 }}>
                     {channel.changePercent > 0 ? '+' : ''}{channel.changePercent?.toFixed(1)}%
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', color: channel.impactChangePercent > 0 ? COLORS.success : channel.impactChangePercent < 0 ? COLORS.danger : COLORS.muted, fontWeight: 700 }}>
-                    {channel.impactChangePercent > 0 ? '+' : ''}{channel.impactChangePercent?.toFixed(1)}%
+                  <td style={{ padding: '12px 10px', textAlign: 'right', color: channel.impactContributionPercent > 0 ? COLORS.success : channel.impactContributionPercent < 0 ? COLORS.danger : COLORS.muted, fontWeight: 700 }}>
+                    {channel.impactContributionPercent > 0 ? '+' : ''}{channel.impactContributionPercent?.toFixed(1)}%
                   </td>
                 </tr>
               );
