@@ -382,7 +382,7 @@ export default function TVCampaignOptimizer() {
         summary: {
           increased: activeChannels.filter(c => c.tag === 'INCREASE').length,
           decreased: activeChannels.filter(c => c.tag === 'DECREASE').length,
-          dropped: channels.filter(c => c.tag === 'DROPPED').length,
+          dropped: finalChannels.filter(c => c.tag === 'DROPPED').length,
           new: activeChannels.filter(c => c.tag === 'NEW').length
         }
       });
