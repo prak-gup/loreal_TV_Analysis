@@ -758,6 +758,10 @@ export default function TVCampaignOptimizer() {
                     {channel.newCostShare?.toFixed(1)}%
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', color: (() => {
+                    // Color driven primarily by status for easy reading
+                    if (channel.tag === 'INCREASE' || channel.tag === 'NEW') return COLORS.success;
+                    if (channel.tag === 'DECREASE' || channel.tag === 'DROPPED') return COLORS.danger;
+                    // UNCHANGED and others
                     const raw = channel.incrementalImpactShare || 0;
                     if (raw > 0) return COLORS.success;
                     if (raw < 0) return COLORS.danger;
