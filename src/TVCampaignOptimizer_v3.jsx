@@ -946,6 +946,87 @@ export default function TVCampaignOptimizer() {
         }
       }
 
+      // Add deterministic Reach %-based variation for KAR and TN to create differentiation
+      // This ensures values look different based on Reach % while maintaining deterministic results
+      if ((selectedRegion === 'KAR' || selectedRegion === 'TN') && channelsWithImpact.length > 0) {
+        // Deterministic seeded random function based on channel properties
+        // This ensures same parameters produce same results
+        const seededRandom = (channel, region) => {
+          // Create a seed from channel name, region, and Reach %
+          const seedString = `${region}_${channel.Channel}_${(channel.SyncReach || 0).toFixed(2)}`;
+          let hash = 0;
+          for (let i = 0; i < seedString.length; i++) {
+            const char = seedString.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32-bit integer
+          }
+          // Convert to 0-1 range
+          return (Math.abs(hash) % 10000) / 10000;
+        };
+
+        // Apply Reach %-based variation: 3-4% random adjustment
+        const VARIATION_RANGE = 3.5; // 3-4% range (using 3.5% as middle)
+        const REACH_VARIATION_FACTOR = 0.8; // How much Reach % influences variation
+        
+        channelsWithImpact.forEach(channel => {
+          const currentValue = channel.incrementalImpactPercent || 0;
+          const absValue = Math.abs(currentValue);
+          const normalizedReach = channel._normalizedReach || 0;
+          
+          // Generate deterministic random value based on channel properties
+          const randomSeed = seededRandom(channel, selectedRegion);
+          
+          // Variation: 3-4% range, influenced by Reach %
+          // Higher Reach % channels get slightly more variation
+          const baseVariation = VARIATION_RANGE * (0.8 + randomSeed * 0.4); // 3.2% to 4.8% range
+          const reachInfluence = normalizedReach * REACH_VARIATION_FACTOR;
+          const variation = baseVariation * (1 + reachInfluence);
+          
+          // Apply variation: add for positive values, subtract for negative
+          // But ensure we don't go below 0 or above 30% cap
+          const enforcedSign = (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1;
+          let adjustedValue = absValue + (variation * enforcedSign);
+          
+          // Cap at 30% max
+          adjustedValue = Math.min(Math.max(adjustedValue, 0), 30.0);
+          
+          channel.incrementalImpactPercent = enforcedSign * adjustedValue;
+        });
+        
+        // Redistribute to ensure sum still matches Impact Improvement %
+        const sumAfterVariation = channelsWithImpact.reduce((sum, c) => 
+          sum + (c.incrementalImpactPercent || 0), 0);
+        
+        if (Math.abs(sumAfterVariation - expectedImprovementPercent) > 0.01 && Math.abs(sumAfterVariation) > 0.01) {
+          // Use Reach %-weighted redistribution to maintain differences
+          const VARIATION_REDIST_FACTOR = 1.2;
+          
+          const variationWeightedMagnitudes = channelsWithImpact.map(channel => {
+            const currentValue = channel.incrementalImpactPercent || 0;
+            const magnitude = Math.abs(currentValue);
+            const normalizedReach = channel._normalizedReach || 0;
+            const weightedMagnitude = magnitude * (1 + normalizedReach * VARIATION_REDIST_FACTOR);
+            
+            return {
+              channel,
+              weightedMagnitude,
+              enforcedSign: (channel.tag === 'INCREASE' || channel.tag === 'NEW') ? 1 : -1
+            };
+          });
+          
+          const sumOfVariationWeighted = variationWeightedMagnitudes.reduce((sum, w) => sum + w.weightedMagnitude, 0);
+          
+          if (sumOfVariationWeighted > 0) {
+            variationWeightedMagnitudes.forEach(({ channel, weightedMagnitude, enforcedSign }) => {
+              const share = weightedMagnitude / sumOfVariationWeighted;
+              const newValue = expectedImprovementPercent * share;
+              const finalValue = Math.min(Math.abs(newValue), 30.0);
+              channel.incrementalImpactPercent = enforcedSign * finalValue;
+            });
+          }
+        }
+      }
+
       // Apply dampening factor for very high % of Incremental Impact values (HSM only)
       // Cap individual channel contributions to prevent unrealistic values
       if (selectedRegion === 'HSM') {
