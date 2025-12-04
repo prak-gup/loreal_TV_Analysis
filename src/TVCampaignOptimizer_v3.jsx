@@ -1698,9 +1698,17 @@ export default function TVCampaignOptimizer() {
               Garnier Hair Care • Cross-Media Measurement & Attribution
             </p>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '1px' }}>Powered by</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: COLORS.accent }}>SYNC</div>
+          <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 20 }}>
+            <img 
+              src="/WPP_logo.svg" 
+              alt="WPP" 
+              style={{ height: '40px', width: 'auto', objectFit: 'contain' }}
+            />
+            <img 
+              src="/SYNC_Logo.png" 
+              alt="SYNC" 
+              style={{ height: '40px', width: 'auto', objectFit: 'contain' }}
+            />
           </div>
         </div>
       </div>
@@ -2093,6 +2101,21 @@ export default function TVCampaignOptimizer() {
           </div>
         </>
       )}
+      
+      {/* Powered by SYNC footer */}
+      <div style={{
+        position: 'fixed',
+        bottom: 20,
+        right: 24,
+        fontSize: 11,
+        opacity: 0.6,
+        textTransform: 'uppercase',
+        letterSpacing: '1px',
+        color: COLORS.muted,
+        fontWeight: 600
+      }}>
+        Powered by SYNC
+      </div>
     </div>
   );
 }
