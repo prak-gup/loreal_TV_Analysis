@@ -1206,6 +1206,52 @@ export default function TVCampaignOptimizer() {
           channel.baselineImpactPercent =
             (channel.baselineImpactPercent || 0) * baselineNormalizationFactor;
         });
+
+        // Create display-friendly rounded values that also sum exactly to 100.0 (within rounding)
+        const channelsWithBaseline = activeChannels.filter(
+          c => typeof c.baselineImpactPercent === 'number'
+        );
+
+        if (channelsWithBaseline.length > 0) {
+          // Work in tenths to avoid floating point drift
+          const temp = channelsWithBaseline.map(channel => {
+            const raw = channel.baselineImpactPercent || 0;
+            const rounded = Math.round(raw * 10) / 10; // one decimal
+            const fractional = raw * 10 - Math.floor(raw * 10); // for tie‑breaking when adjusting
+            return { channel, rounded, fractional };
+          });
+
+          let roundedSum = temp.reduce((sum, item) => sum + item.rounded, 0);
+          let diff = parseFloat((100 - roundedSum).toFixed(1)); // e.g. 0.2 or -0.3
+
+          if (Math.abs(diff) >= 0.1) {
+            const step = diff > 0 ? 0.1 : -0.1;
+            let steps = Math.round(Math.abs(diff) * 10); // number of 0.1 steps
+
+            // When we need to increase, prefer channels with largest positive fractional part;
+            // when decreasing, prefer those with smallest fractional part.
+            const sorted = [...temp].sort((a, b) =>
+              step > 0 ? b.fractional - a.fractional : a.fractional - b.fractional
+            );
+
+            let index = 0;
+            while (steps > 0 && sorted.length > 0) {
+              sorted[index].rounded = parseFloat(
+                (sorted[index].rounded + step).toFixed(1)
+              );
+              index = (index + 1) % sorted.length;
+              steps -= 1;
+            }
+
+            temp.forEach(item => {
+              item.channel.baselineImpactPercentDisplay = item.rounded;
+            });
+          } else {
+            temp.forEach(item => {
+              item.channel.baselineImpactPercentDisplay = item.rounded;
+            });
+          }
+        }
       }
 
       setOptimizedPlan({
@@ -1271,7 +1317,10 @@ export default function TVCampaignOptimizer() {
       channel.originalCostShare?.toFixed(1),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
-      channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '',
+      (() => {
+        const value = channel.baselineImpactPercentDisplay ?? channel.baselineImpactPercent;
+        return value != null ? value.toFixed(1) : '';
+      })(),
       (channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW' || channel.tag === 'DROPPED')
         ? channel.incrementalImpactPercent?.toFixed(2)
         : ''
@@ -1470,7 +1519,10 @@ export default function TVCampaignOptimizer() {
                     })()}
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
-                    {channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '—'}%
+                    {(() => {
+                      const value = channel.baselineImpactPercentDisplay ?? channel.baselineImpactPercent;
+                      return value != null ? value.toFixed(1) : '—';
+                    })()}%
                   </td>
                   <td style={{
                     padding: '12px 10px',
