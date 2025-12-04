@@ -1241,10 +1241,10 @@ export default function TVCampaignOptimizer() {
       'Genre',
       'Reach %',
       'Impact Score',
-      '%baseline impact',
-      'Original %',
-      'New %',
+      '% Old Cost',
+      '% New Cost',
       'Change %',
+      '% Baseline Impact',
       '% of Incremental Impact'
     ];
 
@@ -1255,10 +1255,10 @@ export default function TVCampaignOptimizer() {
       channel.Genre,
       channel.SyncReach?.toFixed(2),
       channel.impactScoreIndex != null ? channel.impactScoreIndex.toFixed(1) : '0.0',
-      channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '',
       channel.originalCostShare?.toFixed(1),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
+      channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '',
       (channel.tag === 'INCREASE' || channel.tag === 'DECREASE' || channel.tag === 'NEW' || channel.tag === 'DROPPED')
         ? channel.incrementalImpactPercent?.toFixed(2)
         : ''
@@ -1393,10 +1393,10 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Genre</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Reach %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact Score</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>%baseline impact</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Old Cost</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% New Cost</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Baseline Impact</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% of Incremental Impact</th>
             </tr>
           </thead>
@@ -1428,9 +1428,6 @@ export default function TVCampaignOptimizer() {
                     {channel.impactScoreIndex != null ? channel.impactScoreIndex.toFixed(1) : '—'}
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
-                    {channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '—'}%
-                  </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
                     {channel.originalCostShare?.toFixed(1)}%
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
@@ -1458,6 +1455,9 @@ export default function TVCampaignOptimizer() {
                       if (raw < -30) return '<-30%';
                       return `${raw > 0 ? '+' : ''}${raw.toFixed(1)}%`;
                     })()}
+                  </td>
+                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
+                    {channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '—'}%
                   </td>
                   <td style={{
                     padding: '12px 10px',
