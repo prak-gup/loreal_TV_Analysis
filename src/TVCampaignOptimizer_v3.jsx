@@ -1698,12 +1698,26 @@ export default function TVCampaignOptimizer() {
               Garnier Hair Care • Cross-Media Measurement & Attribution
             </p>
           </div>
-          <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 16 }}>
             <img 
               src="/WPP_logo.svg" 
               alt="WPP" 
-              style={{ height: '40px', width: 'auto', objectFit: 'contain' }}
+              style={{ 
+                height: '40px', 
+                width: 'auto', 
+                objectFit: 'contain',
+                filter: 'brightness(0) invert(1)'
+              }}
             />
+            <div style={{ 
+              fontSize: '20px', 
+              fontWeight: 300, 
+              color: 'white', 
+              opacity: 0.7,
+              lineHeight: 1
+            }}>
+              +
+            </div>
             <img 
               src="/SYNC_Logo.png" 
               alt="SYNC" 
