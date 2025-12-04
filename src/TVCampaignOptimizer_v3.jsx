@@ -1195,6 +1195,19 @@ export default function TVCampaignOptimizer() {
       // Filter out channels with negligible spend
       const activeChannels = finalChannels.filter(c => c.newCost > 1000 || c.originalCost > 0);
 
+      // Normalize baseline impact so that visible channels sum to 100%
+      const totalBaselineForActive = activeChannels.reduce(
+        (sum, c) => sum + (c.baselineImpactPercent || 0),
+        0
+      );
+      if (totalBaselineForActive > 0) {
+        const baselineNormalizationFactor = 100 / totalBaselineForActive;
+        activeChannels.forEach(channel => {
+          channel.baselineImpactPercent =
+            (channel.baselineImpactPercent || 0) * baselineNormalizationFactor;
+        });
+      }
+
       setOptimizedPlan({
         original: {
           channels: channels,
