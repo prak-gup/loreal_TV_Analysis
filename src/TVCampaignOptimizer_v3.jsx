@@ -1138,6 +1138,60 @@ export default function TVCampaignOptimizer() {
         }
       }
 
+      // Calculate baseline impact percentage for each channel
+      // Use totalImpact (original total impact) as the baseline
+      // For existing channels: use actual Impact value
+      // For NEW channels: estimate based on impact score relative to existing channels
+      const existingChannelsForBaseline = finalChannels.filter(c => c.originalCost > 0);
+      const newChannelsForBaseline = finalChannels.filter(c => c.tag === 'NEW');
+      const droppedChannels = finalChannels.filter(c => c.tag === 'DROPPED');
+      
+      // Use totalImpact as the baseline (this is the "From" number in Impact Improvement card)
+      const totalBaselineImpact = totalImpact;
+      
+      // Calculate baseline impact percentage for existing channels
+      existingChannelsForBaseline.forEach(channel => {
+        if (totalBaselineImpact > 0) {
+          channel.baselineImpactPercent = ((channel.Impact || 0) / totalBaselineImpact) * 100;
+        } else {
+          channel.baselineImpactPercent = 0;
+        }
+      });
+      
+      // For DROPPED channels, calculate their baseline impact percentage
+      droppedChannels.forEach(channel => {
+        if (totalBaselineImpact > 0) {
+          channel.baselineImpactPercent = ((channel.Impact || 0) / totalBaselineImpact) * 100;
+        } else {
+          channel.baselineImpactPercent = 0;
+        }
+      });
+      
+      // Estimate baseline impact for NEW channels based on their impact score
+      // Calculate average impact per existing channel to use as baseline for estimation
+      const existingChannelsWithScore = existingChannelsForBaseline.filter(c => c.impactScoreIndex != null && c.impactScoreIndex > 0);
+      const avgImpactScore = existingChannelsWithScore.length > 0
+        ? existingChannelsWithScore.reduce((sum, c) => sum + (c.impactScoreIndex || 0), 0) / existingChannelsWithScore.length
+        : 0;
+      
+      if (avgImpactScore > 0 && totalBaselineImpact > 0 && existingChannelsForBaseline.length > 0) {
+        // Calculate average impact per existing channel
+        const avgImpactPerChannel = totalBaselineImpact / existingChannelsForBaseline.length;
+        
+        newChannelsForBaseline.forEach(channel => {
+          const channelImpactScore = channel.impactScoreIndex || 0;
+          // Estimate impact based on score ratio relative to average
+          const scoreRatio = channelImpactScore / avgImpactScore;
+          // Estimate baseline impact: use average impact per channel * score ratio
+          const estimatedBaselineImpact = avgImpactPerChannel * scoreRatio;
+          channel.baselineImpactPercent = (estimatedBaselineImpact / totalBaselineImpact) * 100;
+        });
+      } else {
+        newChannelsForBaseline.forEach(channel => {
+          channel.baselineImpactPercent = 0;
+        });
+      }
+
       // Filter out channels with negligible spend
       const activeChannels = finalChannels.filter(c => c.newCost > 1000 || c.originalCost > 0);
 
@@ -1187,6 +1241,7 @@ export default function TVCampaignOptimizer() {
       'Genre',
       'Reach %',
       'Impact Score',
+      '%baseline impact',
       'Original %',
       'New %',
       'Change %',
@@ -1200,6 +1255,7 @@ export default function TVCampaignOptimizer() {
       channel.Genre,
       channel.SyncReach?.toFixed(2),
       channel.impactScoreIndex != null ? channel.impactScoreIndex.toFixed(1) : '0.0',
+      channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '',
       channel.originalCostShare?.toFixed(1),
       channel.newCostShare?.toFixed(1),
       channel.changePercent?.toFixed(1),
@@ -1337,6 +1393,7 @@ export default function TVCampaignOptimizer() {
               <th style={{ padding: '14px 10px', textAlign: 'center', fontWeight: 600 }}>Genre</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Reach %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Impact Score</th>
+              <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>%baseline impact</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>Old %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>New %</th>
               <th style={{ padding: '14px 10px', textAlign: 'right', fontWeight: 600 }}>% Cost Change</th>
@@ -1369,6 +1426,9 @@ export default function TVCampaignOptimizer() {
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{channel.SyncReach?.toFixed(2)}%</td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace' }}>
                     {channel.impactScoreIndex != null ? channel.impactScoreIndex.toFixed(1) : '—'}
+                  </td>
+                  <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
+                    {channel.baselineImpactPercent != null ? channel.baselineImpactPercent.toFixed(1) : '—'}%
                   </td>
                   <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'monospace', color: COLORS.muted }}>
                     {channel.originalCostShare?.toFixed(1)}%
