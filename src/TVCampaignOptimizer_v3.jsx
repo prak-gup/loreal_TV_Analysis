@@ -1760,7 +1760,7 @@ export default function TVCampaignOptimizer() {
               TV Campaign Optimizer
             </h1>
             <p style={{ margin: '10px 0 0', opacity: 0.8, fontSize: 15, fontWeight: 500 }}>
-              Garnier Hair Care • Cross-Media Measurement & Attribution
+              Garnier Black Naturals • Cross-Media Measurement & Attribution
             </p>
           </div>
           <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 16 }}>

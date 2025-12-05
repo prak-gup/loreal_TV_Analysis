@@ -1,6 +1,6 @@
 # TV Campaign Optimizer
 
-A React-based tool for optimizing TV advertising campaigns for L'Oréal (Garnier Hair Care).
+A React-based tool for optimizing TV advertising campaigns for L'Oréal (Garnier Black Naturals).
 
 ## Quick Start
 
@@ -68,4 +68,5 @@ npm run preview
 - React 18
 - Recharts (for data visualization)
 - Vite (build tool and dev server)
+
 

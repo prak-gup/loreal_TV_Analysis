@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **TV Campaign Budget Optimization Tool** for L'Oréal (Garnier Hair Care) built with React. The tool simulates and optimizes TV advertising budgets across different channels and regions to maximize campaign outcomes without increasing spend. It's powered by SYNC's cross-media measurement and attribution platform.
+This is a **TV Campaign Budget Optimization Tool** for L'Oréal (Garnier Black Naturals) built with React. The tool simulates and optimizes TV advertising budgets across different channels and regions to maximize campaign outcomes without increasing spend. It's powered by SYNC's cross-media measurement and attribution platform.
 
 **Core Purpose**: Redistribute TV advertising budgets intelligently to achieve better ROI, reach, or impact through data-driven channel mix optimization.
 
